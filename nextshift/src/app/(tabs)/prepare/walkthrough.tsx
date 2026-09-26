@@ -20,7 +20,7 @@ const steps = [
   },
   {
     title: 'Plan the first commute',
-    body: 'Check walking, bus, and train before you say yes. NextShift will later open live directions from here.',
+    body: 'Check walking, bus, and train before you say yes. How to get there opens live Google Maps directions.',
   },
 ];
 

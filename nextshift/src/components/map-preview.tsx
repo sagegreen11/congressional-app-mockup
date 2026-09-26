@@ -1,22 +1,57 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { createElement } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import {
+  googleDirectionsEmbedUrl,
+  googlePlaceEmbedUrl,
+  type TravelMode,
+} from '@/lib/google-maps';
 import { colors, fonts, radii } from '@/theme/tokens';
 
 type MapPreviewProps = {
   label?: string;
   tall?: boolean;
+  query?: string;
+  directions?: boolean;
+  mode?: TravelMode;
 };
 
-export function MapPreview({ label = 'Bergen County area · map placeholder', tall }: MapPreviewProps) {
+export function MapPreview({
+  label,
+  tall,
+  query = 'Bergen County, NJ',
+  directions = false,
+  mode = 'bus',
+}: MapPreviewProps) {
+  const src = directions ? googleDirectionsEmbedUrl(query, mode) : googlePlaceEmbedUrl(query);
+
   return (
     <View style={[styles.map, tall && styles.tall]}>
-      <View style={[styles.road, styles.h1]} />
-      <View style={[styles.road, styles.h2]} />
-      <View style={[styles.road, styles.v1]} />
-      <View style={[styles.road, styles.v2]} />
-      <View style={styles.water} />
-      <View style={styles.pin} />
-      <Text style={styles.label}>{label}</Text>
+      {Platform.OS === 'web' ? (
+        createElement('iframe', {
+          src,
+          title: label ?? 'Google Map',
+          allowFullScreen: true,
+          loading: 'lazy',
+          referrerPolicy: 'no-referrer-when-downgrade',
+          allow: 'geolocation',
+          style: {
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+          },
+        })
+      ) : (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={label ?? 'Open Google Maps'}
+          onPress={() => Linking.openURL(src.replace('&output=embed', ''))}
+          style={styles.fallback}>
+          <Text style={styles.fallbackText}>Open Google Maps</Text>
+        </Pressable>
+      )}
+      {label ? <Text style={styles.label}>{label}</Text> : null}
     </View>
   );
 }
@@ -27,66 +62,29 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.mutedBlue,
     overflow: 'hidden',
-    justifyContent: 'flex-end',
+    position: 'relative',
   },
   tall: {
     height: 220,
   },
-  road: {
-    position: 'absolute',
-    backgroundColor: colors.cream,
-    opacity: 0.55,
+  fallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.mutedBlue,
   },
-  h1: {
-    top: 42,
-    left: 0,
-    right: 0,
-    height: 6,
-  },
-  h2: {
-    top: 96,
-    left: 20,
-    right: 8,
-    height: 4,
-  },
-  v1: {
-    top: 0,
-    bottom: 0,
-    left: '28%',
-    width: 5,
-  },
-  v2: {
-    top: 18,
-    bottom: 24,
-    left: '62%',
-    width: 4,
-  },
-  water: {
-    position: 'absolute',
-    right: 12,
-    top: 18,
-    width: 70,
-    height: 54,
-    borderRadius: 40,
-    backgroundColor: colors.blue,
-    opacity: 0.9,
-  },
-  pin: {
-    position: 'absolute',
-    left: '46%',
-    top: 58,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.brown,
+  fallbackText: {
+    fontFamily: fonts.sansSemibold,
+    color: colors.brown,
   },
   label: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
     fontFamily: fonts.sansMedium,
     fontSize: 11,
     color: colors.brown,
     backgroundColor: colors.cream,
-    alignSelf: 'flex-start',
-    margin: 10,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radii.sm,

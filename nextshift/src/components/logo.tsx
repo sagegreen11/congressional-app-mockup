@@ -1,44 +1,34 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { createElement } from 'react';
+import { Image, Platform, StyleSheet } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+const logoSource = require('../assets/logo.png') as number | string | { uri: string };
+
+function webUri(source: typeof logoSource): string {
+  if (typeof source === 'string') return source;
+  if (typeof source === 'object' && source && 'uri' in source) return source.uri;
+  return String(source);
+}
 
 export function Logo() {
-  return (
-    <View style={styles.row}>
-      <View style={styles.mark}>
-        <View style={styles.peak} />
-      </View>
-      <Text style={styles.word}>nextshift</Text>
-    </View>
-  );
+  if (Platform.OS === 'web') {
+    return createElement('img', {
+      src: webUri(logoSource),
+      alt: 'nextshift',
+      style: {
+        width: 118,
+        height: 32,
+        objectFit: 'contain',
+        display: 'block',
+      },
+    });
+  }
+
+  return <Image source={logoSource} style={styles.image} resizeMode="contain" accessibilityLabel="nextshift" />;
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mark: {
-    width: 18,
-    height: 16,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  peak: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 13,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: colors.brown,
-  },
-  word: {
-    fontFamily: fonts.serif,
-    fontSize: 18,
-    color: colors.brown,
-    letterSpacing: 0.3,
+  image: {
+    width: 118,
+    height: 32,
   },
 });

@@ -1,42 +1,71 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MapPreview } from '@/components/map-preview';
 import { PrimaryButton } from '@/components/primary-button';
 import { Screen } from '@/components/screen';
 import { SearchBar } from '@/components/search-bar';
+import { googleDirectionsAppUrl, type TravelMode } from '@/lib/google-maps';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
+
+const MODE_TIMES: Record<TravelMode, string> = {
+  walk: '18 min',
+  bus: '12 min',
+  train: '22 min',
+};
 
 export default function DirectionsScreen() {
   const { name, address } = useLocalSearchParams<{ name?: string; address?: string }>();
-  const destination = name || 'Hackensack, NJ';
-  const line = address || 'Bergen County prototype destination';
+  const [destination, setDestination] = useState(name || 'Hackensack, NJ');
+  const [mode, setMode] = useState<TravelMode>('bus');
+  const line = address || 'Bergen County, NJ';
+  const query = address || destination || line;
 
   return (
     <Screen>
       <View style={styles.content}>
         <Text style={styles.title}>How to get there?</Text>
-        <SearchBar value={destination} onChangeText={() => {}} placeholder="destination" />
+        <SearchBar value={destination} onChangeText={setDestination} placeholder="destination" />
         <Text style={styles.address}>{line}</Text>
         <View style={styles.modes}>
-          <Mode label="walk" value="18 min" />
-          <Mode label="bus" value="12 min" />
-          <Mode label="train" value="22 min" />
+          {(['walk', 'bus', 'train'] as const).map((item) => (
+            <Mode
+              key={item}
+              label={item}
+              value={MODE_TIMES[item]}
+              selected={mode === item}
+              onPress={() => setMode(item)}
+            />
+          ))}
         </View>
-        <MapPreview tall label="Transit preview · Google Maps later" />
-        <PrimaryButton label="Open Directions" onPress={() => {}} />
-        <Text style={styles.note}>Times are placeholders. Live routing is not connected yet.</Text>
+        <MapPreview tall query={query} directions mode={mode} label="Google Maps" />
+        <PrimaryButton
+          label="Open Directions"
+          onPress={() => Linking.openURL(googleDirectionsAppUrl(address || destination, mode))}
+        />
+        <Text style={styles.note}>Live Google Maps directions from your current location.</Text>
       </View>
     </Screen>
   );
 }
 
-function Mode({ label, value }: { label: string; value: string }) {
+function Mode({
+  label,
+  value,
+  selected,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.mode}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} style={[styles.mode, selected && styles.modeSelected]}>
       <Text style={styles.modeLabel}>{label}</Text>
       <Text style={styles.modeValue}>{value}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -69,6 +98,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.mutedBlue,
+  },
+  modeSelected: {
+    backgroundColor: colors.mutedBlue,
+    borderColor: colors.brown,
   },
   modeLabel: {
     fontFamily: fonts.serifItalic,

@@ -30,7 +30,7 @@ export default function JobsScreen() {
         <Text style={styles.kicker}>nextshift</Text>
         <Text style={styles.title}>Jobs Near You</Text>
         <SearchBar value={query} onChangeText={setQuery} placeholder="search towns or roles" />
-        <MapPreview label="Bergen County jobs · map placeholder" />
+        <MapPreview label="Bergen County jobs" query="Bergen County, NJ" />
         <PrototypeNote text="Listings are sample postings for this prototype." />
         <View style={styles.list}>
           {filtered.map((job) => (

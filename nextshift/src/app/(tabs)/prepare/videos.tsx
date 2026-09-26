@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '@/components/primary-button';
 import { Screen } from '@/components/screen';
 import { ShoeMark } from '@/components/shoe-mark';
-import { VideoCard } from '@/components/video-card';
+import { VideoCard, YoutubeFrame } from '@/components/video-card';
 import { prepVideos } from '@/data/videos';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
@@ -21,11 +21,11 @@ export default function PrepVideosScreen() {
       {active ? (
         <View style={styles.player}>
           <View style={styles.stage}>
-            <Text style={styles.playMark}>▶</Text>
+            <YoutubeFrame video={active} />
           </View>
           <Text style={styles.clipTitle}>{active.title}</Text>
           <Text style={styles.meta}>
-            {active.topic} · {active.length} · playback is a placeholder
+            {active.topic} · {active.length}
           </Text>
           <PrimaryButton label="Back to clips" tone="cream" onPress={() => setActiveId(null)} />
         </View>
@@ -72,12 +72,7 @@ const styles = StyleSheet.create({
     height: 210,
     backgroundColor: colors.brown,
     borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playMark: {
-    color: colors.cream,
-    fontSize: 36,
+    overflow: 'hidden',
   },
   clipTitle: {
     fontFamily: fonts.serif,
