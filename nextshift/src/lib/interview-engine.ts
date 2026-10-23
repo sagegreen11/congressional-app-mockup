@@ -1,12 +1,20 @@
+import {
+  generatedLine,
+  interviewGenerationRequest,
+  renderPrompt,
+  type InterviewLang,
+  type InterviewPrompt,
+  type PhraseKey,
+} from './interview-locale';
+
+export type { InterviewLang, InterviewPrompt };
+
 export type InterviewTurn = {
   role: 'interviewer' | 'candidate';
   text: string;
   themeId?: string;
+  prompt?: InterviewPrompt;
 };
-
-export const OPENING_QUESTION = 'What kind of job are you looking for?';
-
-export const FUN_QUESTION = 'What do you like to do for fun?';
 
 type Signal = { label: string; evidence: string };
 
@@ -43,20 +51,25 @@ type Portrait = {
 
 type Candidate = {
   id: string;
-  reaction: string;
-  question: string;
+  reactionKey: PhraseKey;
+  reactionVars?: Record<string, string>;
+  questionKey: PhraseKey;
+  questionVars?: Record<string, string>;
 };
 
 const VAGUE =
-  /\b(stuff|whatever|idk|i don't know|i dont know|not sure|kind of|sort of|maybe|nothing much|the usual)\b/i;
+  /\b(stuff|whatever|idk|i don't know|i dont know|not sure|kind of|sort of|maybe|nothing much|the usual|no sé|no se|nada mucho|no mucho|algo así|algo asi)\b|不知道|还好|随便|没什么|一般/i;
 
 const METHOD =
-  /\b(tested|tried|practiced|figured|fixed|asked|changed|kept (going|trying|at it)|refused to stop|until i figured)\b/i;
+  /\b(tested|tried|practiced|figured|fixed|asked|changed|kept (going|trying|at it)|refused to stop|until i figured|probé|probe|intenté|intente|practiqué|practique|arreglé|arregle|pregunté|pregunte|cambié|cambie|seguí|segui|no paré|no pare)\b|试了|尝试|练习|修好|问了|改了|一直在/i;
 
 const OUTCOME =
-  /\b(until i figured|until i stopped|stopped making|it worked|i finished|i got it|we got it|changed the outcome|in the end|finally)\b/i;
+  /\b(until i figured|until i stopped|stopped making|it worked|i finished|i got it|we got it|changed the outcome|in the end|finally|al final|funcionó|funciono|lo logré|lo logre|terminé|termine)\b|最后|终于|成功了|做好了/i;
 
-const FILLER = /\b(like|you know|um+|uh+|basically|literally|i mean)\b/gi;
+const FILLER = /\b(like|you know|um+|uh+|basically|literally|i mean|o sea|pues|eh+)\b|那个|就是|嗯+/gi;
+
+const STORY =
+  /\b(when i|one time|i started|i built|i kept|because|una vez|empecé|empece|construí|construi|porque|ya que)\b|因为|有一次|那次|当时|后来/i;
 
 const QUESTION_STOP = new Set([
   'what',
@@ -116,74 +129,76 @@ const QUESTION_STOP = new Set([
 ]);
 
 const TRAIT_WORDS: { label: string; pattern: RegExp }[] = [
-  { label: 'persistent', pattern: /\b(persistent|persistence|stubborn|wouldn't stop|would not stop|refused to stop|didn't give up|did not give up|kept (going|trying|at it)|until i figured)\b/i },
-  { label: 'competitive', pattern: /\b(competitive|compete|winning|beat)\b/i },
-  { label: 'reliable', pattern: /\b(reliable|on time|show up|dependable|responsible)\b/i },
-  { label: 'curious', pattern: /\b(curious|curiosity|wanted to understand|figure out why)\b/i },
-  { label: 'helpful', pattern: /\b(helpful|helping|help people|take care of)\b/i },
-  { label: 'calm', pattern: /\b(calm|patient|patience)\b/i },
-  { label: 'hardworking', pattern: /\b(hardworking|hard-working|work hard|put in the hours)\b/i },
-  { label: 'independent', pattern: /\b(independent|on my own|by myself)\b/i },
-  { label: 'organized', pattern: /\b(organized|organisation|organization|planning ahead)\b/i },
-  { label: 'creative', pattern: /\b(creative|creativity)\b/i },
-  { label: 'honest', pattern: /\b(honest|honesty)\b/i },
-  { label: 'ambitious', pattern: /\b(ambitious|ambition|i want to get better)\b/i },
-  { label: 'caring', pattern: /\b(caring|kind|empathetic)\b/i },
-  { label: 'shy', pattern: /\b(shy|quiet|introverted)\b/i },
-  { label: 'outgoing', pattern: /\b(outgoing|extroverted|people person)\b/i },
+  { label: 'persistent', pattern: /\b(persistent|persistence|stubborn|wouldn't stop|would not stop|refused to stop|didn't give up|did not give up|kept (going|trying|at it)|until i figured|persistente|perseverante|no me rendí|no me rendi|seguí intentando|segui intentando)\b|坚持|不放弃/i },
+  { label: 'competitive', pattern: /\b(competitive|compete|winning|beat|competitivo|competitiva)\b|好胜|竞争/i },
+  { label: 'reliable', pattern: /\b(reliable|on time|show up|dependable|responsible|responsable|confiable|fiable)\b|可靠|守时/i },
+  { label: 'curious', pattern: /\b(curious|curiosity|wanted to understand|figure out why|curioso|curiosa)\b|好奇/i },
+  { label: 'helpful', pattern: /\b(helpful|helping|help people|take care of|servicial|ayudar)\b|乐于助人|帮忙/i },
+  { label: 'calm', pattern: /\b(calm|patient|patience|tranquilo|tranquila|paciente)\b|冷静|有耐心/i },
+  { label: 'hardworking', pattern: /\b(hardworking|hard-working|work hard|put in the hours|trabajador|trabajadora|esforzado|esforzada)\b|勤奋|努力/i },
+  { label: 'independent', pattern: /\b(independent|on my own|by myself|independiente)\b|独立/i },
+  { label: 'organized', pattern: /\b(organized|organisation|organization|planning ahead|organizado|organizada)\b|有条理/i },
+  { label: 'creative', pattern: /\b(creative|creativity|creativo|creativa)\b|有创造力/i },
+  { label: 'honest', pattern: /\b(honest|honesty|honesto|honesta)\b|诚实/i },
+  { label: 'ambitious', pattern: /\b(ambitious|ambition|i want to get better|ambicioso|ambiciosa)\b|有进取心/i },
+  { label: 'caring', pattern: /\b(caring|kind|empathetic|amable|atento|atenta)\b|体贴|善良/i },
+  { label: 'shy', pattern: /\b(shy|quiet|introverted|tímido|timido|tímida|timida)\b|内向|害羞/i },
+  { label: 'outgoing', pattern: /\b(outgoing|extroverted|people person|extrovertido|extrovertida)\b|外向/i },
 ];
 
 const EMOTIONS: { label: string; pattern: RegExp }[] = [
-  { label: 'frustrated', pattern: /\b(frustrated|frustrating|annoyed|stuck)\b/i },
-  { label: 'proud', pattern: /\b(proud|pride)\b/i },
-  { label: 'nervous', pattern: /\b(nervous|anxious|scared|intimidated)\b/i },
-  { label: 'excited', pattern: /\b(excited|pumped|eager)\b/i },
-  { label: 'stressed', pattern: /\b(stressed|overwhelmed|pressure)\b/i },
+  { label: 'frustrated', pattern: /\b(frustrated|frustrating|annoyed|stuck|frustrad[oa]|atascad[oa])\b|沮丧|卡住|烦/i },
+  { label: 'proud', pattern: /\b(proud|pride|orgullos[oa])\b|自豪|骄傲/i },
+  { label: 'nervous', pattern: /\b(nervous|anxious|scared|intimidated|nervios[oa]|ansios[oa])\b|紧张|害怕/i },
+  { label: 'excited', pattern: /\b(excited|pumped|eager|emocionad[oa]|entusiasm[oa])\b|兴奋|激动/i },
+  { label: 'stressed', pattern: /\b(stressed|overwhelmed|pressure|estresad[oa]|agobiad[oa])\b|压力|不堪/i },
 ];
 
 const VALUE_HINTS: { label: string; pattern: RegExp }[] = [
-  { label: 'solving real problems', pattern: /\b(needed|real problem|actually help|for my church|for my family)\b/i },
-  { label: 'doing the work yourself', pattern: /\b(i built|i made|i tested|i figured)\b/i },
-  { label: 'showing up for people', pattern: /\b(customers|neighbors|team|family|church)\b/i },
-  { label: 'getting things right', pattern: /\b(until it worked|figured it out|refused to stop)\b/i },
+  { label: 'solving real problems', pattern: /\b(needed|real problem|actually help|for my church|for my family|problema real|ayudar de verdad)\b|真正的问题|帮到/i },
+  { label: 'doing the work yourself', pattern: /\b(i built|i made|i tested|i figured|lo hice|lo construí|lo construi|lo probé|lo probe)\b|我做了|我自己/i },
+  { label: 'showing up for people', pattern: /\b(customers|neighbors|team|family|church|clientes|vecinos|familia|equipo)\b|客户|家人|团队|邻居/i },
+  { label: 'getting things right', pattern: /\b(until it worked|figured it out|refused to stop|hasta que funcionó|hasta que funciono)\b|直到做好|弄明白/i },
 ];
 
 const BEHAVIORS: { label: string; pattern: RegExp }[] = [
-  { label: 'taking the lead in groups', pattern: /\b(take the lead|take charge|in charge|lead the group|when working in groups)\b/i },
-  { label: 'working in groups', pattern: /\b(in groups|group work|on a team|with a team|teamwork)\b/i },
-  { label: 'teaching yourself', pattern: /\b(taught myself|self-taught|on my own|learning programming|started learning)\b/i },
-  { label: 'staying until it is right', pattern: /\b(refused to stop|until i figured|over and over|again and again)\b/i },
-  { label: 'helping when it is busy', pattern: /\b(when (the store is |it('s| is) )?busy|slammed|helping customers)\b/i },
+  { label: 'taking the lead in groups', pattern: /\b(take the lead|take charge|in charge|lead the group|when working in groups|tomar la iniciativa|me puse al frente)\b|带头|负责带/i },
+  { label: 'working in groups', pattern: /\b(in groups|group work|on a team|with a team|teamwork|en grupo|en equipo|trabajo en equipo)\b|小组|团队合作|一起做/i },
+  { label: 'teaching yourself', pattern: /\b(taught myself|self-taught|on my own|learning programming|started learning|aprendí solo|aprendi solo|por mi cuenta)\b|自学|自己学/i },
+  { label: 'staying until it is right', pattern: /\b(refused to stop|until i figured|over and over|again and again|una y otra vez|hasta que quedó|hasta que quedo)\b|一遍又一遍|直到做对/i },
+  { label: 'helping when it is busy', pattern: /\b(when (the store is |it('s| is) )?busy|slammed|helping customers|cuando hay prisa|ayudar a los clientes)\b|忙的时候|顾客很多/i },
 ];
 
 const JOB_KINDS: { label: string; pattern: RegExp }[] = [
-  { label: 'software engineering', pattern: /\b(software|programming|programmer|coding|developer|engineer)\b/i },
-  { label: 'grocery or retail', pattern: /\b(grocery|retail|cashier|store|sales associate)\b/i },
-  { label: 'food service', pattern: /\b(cafe|café|restaurant|barista|kitchen|food)\b/i },
-  { label: 'warehouse work', pattern: /\b(warehouse|stock|shipping|logistics)\b/i },
-  { label: 'childcare', pattern: /\b(childcare|daycare|babysit|kids)\b/i },
-  { label: 'healthcare', pattern: /\b(nurse|cna|hospital|caregiver|medical)\b/i },
-  { label: 'office or admin work', pattern: /\b(office|admin|receptionist|clerical)\b/i },
+  { label: 'software engineering', pattern: /\b(software|programming|programmer|coding|developer|engineer|programación|programacion|programador|ingenier[íi]a)\b|软件|编程|工程师/i },
+  { label: 'grocery or retail', pattern: /\b(grocery|retail|cashier|store|sales associate|tienda|cajero|comercio)\b|超市|零售|收银/i },
+  { label: 'food service', pattern: /\b(cafe|café|restaurant|barista|kitchen|food|restaurante|cocina)\b|餐饮|餐厅|厨房/i },
+  { label: 'warehouse work', pattern: /\b(warehouse|stock|shipping|logistics|almacén|almacen)\b|仓储|仓库/i },
+  { label: 'childcare', pattern: /\b(childcare|daycare|babysit|kids|niños|ninos|cuidado infantil)\b|托幼|带孩子/i },
+  { label: 'healthcare', pattern: /\b(nurse|cna|hospital|caregiver|medical|enfermer|salud)\b|护士|医院|护理/i },
+  { label: 'office or admin work', pattern: /\b(office|admin|receptionist|clerical|oficina|administración|administracion)\b|行政|办公室/i },
 ];
 
 const HOBBY_KINDS: { label: string; pattern: RegExp }[] = [
-  { label: 'building games', pattern: /\b(games?|gaming|unity|roblox|minecraft)\b/i },
-  { label: 'making things', pattern: /\b(build|building|make|making|diy|craft)\b/i },
-  { label: 'music', pattern: /\b(music|guitar|piano|singing|band)\b/i },
-  { label: 'sports', pattern: /\b(soccer|basketball|football|gym|running|sports)\b/i },
-  { label: 'art', pattern: /\b(draw|drawing|art|paint|design)\b/i },
-  { label: 'cooking', pattern: /\b(cook|cooking|bake|baking)\b/i },
-  { label: 'reading', pattern: /\b(read|reading|books)\b/i },
-  { label: 'being outdoors', pattern: /\b(hike|hiking|outdoors|fishing|garden)\b/i },
+  { label: 'building games', pattern: /\b(games?|gaming|unity|roblox|minecraft|juegos|videojuegos)\b|游戏/i },
+  { label: 'making things', pattern: /\b(build|building|make|making|diy|craft|hacer|construir)\b|动手|制作/i },
+  { label: 'music', pattern: /\b(music|guitar|piano|singing|band|música|musica)\b|音乐|吉他/i },
+  { label: 'sports', pattern: /\b(soccer|basketball|football|gym|running|sports|fútbol|futbol|deporte)\b|运动|足球/i },
+  { label: 'art', pattern: /\b(draw|drawing|art|paint|design|dibujar|arte)\b|画画|设计/i },
+  { label: 'cooking', pattern: /\b(cook|cooking|bake|baking|cocinar)\b|做饭|烹饪|烘焙/i },
+  { label: 'reading', pattern: /\b(read|reading|books|leer|lectura)\b|读书|阅读/i },
+  { label: 'being outdoors', pattern: /\b(hike|hiking|outdoors|fishing|garden|aire libre)\b|户外|爬山/i },
 ];
 
 function labelFrom(text: string, bank: { label: string; pattern: RegExp }[], fallbackMax = 8) {
   const hit = bank.find((item) => item.pattern.test(text));
   if (hit) return hit.label;
-  const stripped = text.replace(
-    /^(i('m| am) looking for|i want|maybe|i like to|i enjoy|for fun i|in my free time i)\s+/i,
-    '',
-  );
+  const stripped = text
+    .replace(
+      /^(i('m| am) looking for|i want|maybe|i like to|i enjoy|for fun i|in my free time i|estoy buscando|quiero|me gusta|busco|me gustaría|me gustaria)\s+/i,
+      '',
+    )
+    .replace(/^(我在找|我想做|我想|我喜欢|我平时喜欢)/, '');
   return clip(stripped, fallbackMax) || 'that';
 }
 
@@ -216,22 +231,27 @@ function wordCount(text: string) {
   return clean(text).split(/\s+/).filter(Boolean).length;
 }
 
-function clip(text: string, maxWords = 12) {
-  const parts = clean(text).split(' ');
-  return parts.length <= maxWords ? parts.join(' ') : `${parts.slice(0, maxWords).join(' ')}`;
+function measure(text: string) {
+  const cjk = text.match(/[\u3400-\u9fff]/g)?.length ?? 0;
+  const latin = text.split(/\s+/).filter((word) => /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(word)).length;
+  if (cjk >= 2 && cjk >= latin) return Math.max(1, Math.round(cjk / 1.6) + latin);
+  return Math.max(latin, wordCount(text));
 }
 
-function asHeard(text: string) {
-  return clip(text, 18)
-    .replace(/\bI'm\b/g, "you're")
-    .replace(/\bI've\b/g, "you've")
-    .replace(/\bI\b/g, 'you')
-    .replace(/\bmy\b/gi, 'your');
+function clip(text: string, maxWords = 12) {
+  const cleaned = clean(text);
+  const cjk = cleaned.match(/[\u3400-\u9fff]/g)?.length ?? 0;
+  if (cjk >= 2 && !cleaned.includes(' ')) {
+    const max = Math.max(4, Math.round(maxWords * 1.6));
+    return cleaned.length <= max ? cleaned : cleaned.slice(0, max);
+  }
+  const parts = cleaned.split(/\s+/);
+  return parts.length <= maxWords ? parts.join(' ') : parts.slice(0, maxWords).join(' ');
 }
 
 function sentencesOf(text: string) {
   return clean(text)
-    .split(/(?<=[.!?])\s+/)
+    .split(/(?<=[.!?。！？])\s*/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -256,13 +276,27 @@ function matchSignals(text: string, bank: { label: string; pattern: RegExp }[]):
     .map((item) => ({ label: item.label, evidence: sentenceWith(text, item.pattern) }));
 }
 
+function mentionsSelf(text: string) {
+  const withoutGroup = text.replace(/我们/g, '');
+  return (
+    /\b(i|i'm|i've|i'd|yo|soy|estoy|tengo|hice|hago|quería|queria)\b/i.test(text) ||
+    /我/.test(withoutGroup)
+  );
+}
+
+function mentionsGroup(text: string) {
+  return /\b(we|nosotros|nosotras)\b/i.test(text) || /我们/.test(text);
+}
+
 function statedTraits(text: string): Signal[] {
   const intro =
     text.match(/describe myself as ([^.!?]+)/i)?.[1] ??
-    text.match(/\b(?:i am|i'm|i’d say i(?:'m| am)|i tend to)\s+([^.!?]+)/i)?.[1];
+    text.match(/\b(?:i am|i'm|i'd say i(?:'m| am)|i tend to)\s+([^.!?]+)/i)?.[1] ??
+    text.match(/\b(?:soy|me considero|me describo como|diría que soy|diria que soy|tiendo a ser)\s+([^.!?¿¡]+)/i)?.[1] ??
+    text.match(/(?:我觉得自己|我认为自己|我这个人|我比较|我挺|我很|我是一个?)([^。！？\n]{1,20})/)?.[1];
   if (!intro) return [];
   return uniqueSignals(
-    TRAIT_WORDS.filter((trait) => new RegExp(`\\b${trait.label}\\b`, 'i').test(intro)).map((trait) => ({
+    TRAIT_WORDS.filter((trait) => trait.pattern.test(intro)).map((trait) => ({
       label: trait.label,
       evidence: clip(intro, 14),
     })),
@@ -271,36 +305,49 @@ function statedTraits(text: string): Signal[] {
 
 function impliedTraits(text: string): Signal[] {
   const found: Signal[] = [];
-  if (/\b(refused to stop|wouldn't stop|kept (getting|trying|going)|until i figured|didn't give up)\b/i.test(text)) {
-    found.push({ label: 'persistent', evidence: sentenceWith(text, /refused|figured|kept getting|give up/i) });
+  if (
+    /(?:\b(refused to stop|wouldn't stop|kept (getting|trying|going)|until i figured|didn't give up|no me rendí|no me rendi|seguí intentando|segui intentando|no paré|no pare)\b|坚持|不放弃|一直试)/i.test(
+      text,
+    )
+  ) {
+    found.push({
+      label: 'persistent',
+      evidence: sentenceWith(text, /refused|figured|kept getting|give up|rendí|rendi|intentando|paré|pare|坚持|不放弃/i),
+    });
   }
-  if (/\b(practiced|over and over|again and again|until (i|it) (got it|worked|succeeded))\b/i.test(text)) {
-    found.push({ label: 'competitive', evidence: sentenceWith(text, /practiced|over and over|again/i) });
+  if (/\b(practiced|over and over|again and again|until (i|it) (got it|worked|succeeded)|practiqué|practique|una y otra vez)\b|一遍又一遍/i.test(text)) {
+    found.push({ label: 'competitive', evidence: sentenceWith(text, /practiced|over and over|again|practiqu|una y otra|一遍/i) });
   }
-  if (/\b(on time|showed up|didn't miss)\b/i.test(text)) {
-    found.push({ label: 'reliable', evidence: sentenceWith(text, /on time|showed up/i) });
+  if (/\b(on time|showed up|didn't miss|a tiempo|llegué|llegue)\b|守时|准时/i.test(text)) {
+    found.push({ label: 'reliable', evidence: sentenceWith(text, /on time|showed up|a tiempo|llegu|守时|准时/i) });
   }
-  if (/\b(helping customers|helped my|took care of)\b/i.test(text)) {
-    found.push({ label: 'helpful', evidence: sentenceWith(text, /help|take care/i) });
+  if (/\b(helping customers|helped my|took care of|ayudé|ayude|cuidé|cuide)\b|帮忙|照顾/i.test(text)) {
+    found.push({ label: 'helpful', evidence: sentenceWith(text, /help|take care|ayud|cuid|帮忙|照顾/i) });
   }
-  if (/\b(take the lead|take charge|in charge)\b/i.test(text)) {
-    found.push({ label: 'comfortable leading', evidence: sentenceWith(text, /lead|charge/i) });
+  if (/\b(take the lead|take charge|in charge|tomar la iniciativa)\b|带头/i.test(text)) {
+    found.push({ label: 'comfortable leading', evidence: sentenceWith(text, /lead|charge|iniciativa|带头/i) });
   }
   return uniqueSignals(found);
 }
 
 function motivesIn(text: string): Signal[] {
-  const because = text.match(/because ([^.!?]+)/i)?.[1];
-  const wanted = text.match(/i wanted to ([^.!?]+)/i)?.[1];
+  const because =
+    text.match(/\bbecause ([^.!?]+)/i)?.[1] ??
+    text.match(/\bporque ([^.!?¿¡]+)/i)?.[1] ??
+    text.match(/因为([^。！？]+)/)?.[1];
+  const wanted =
+    text.match(/\bi wanted to ([^.!?]+)/i)?.[1] ??
+    text.match(/\b(?:quería|queria|quise) ([^.!?¿¡]+)/i)?.[1] ??
+    text.match(/我想([^。！？]{1,24})/)?.[1];
   const found: Signal[] = [];
   if (because) found.push({ label: clip(because, 12), evidence: clip(because, 16) });
-  if (wanted) found.push({ label: `wanting to ${clip(wanted, 10)}`, evidence: clip(wanted, 16) });
+  if (wanted) found.push({ label: clip(wanted, 10), evidence: clip(wanted, 16) });
   return found;
 }
 
 function readAnswer(text: string): Reading {
   const raw = clean(text);
-  const count = wordCount(raw);
+  const count = measure(raw);
   const stated = uniqueSignals(statedTraits(raw));
   const implied = uniqueSignals(impliedTraits(raw)).filter(
     (item) => !stated.some((trait) => trait.label === item.label),
@@ -310,11 +357,11 @@ function readAnswer(text: string): Reading {
     wordCount: count,
     isShort: (count < 8 && stated.length === 0 && implied.length === 0) || count <= 3,
     isVague: VAGUE.test(raw) && count < 20 && stated.length === 0,
-    hasStory: count >= 18 || /\b(when i|one time|i started|i built|i kept|because)\b/i.test(raw),
+    hasStory: count >= 18 || STORY.test(raw),
     hasMethod: METHOD.test(raw),
     hasOutcome: OUTCOME.test(raw),
-    usesWe: /\bwe\b/i.test(raw) && !/\bi\b/i.test(raw),
-    usesI: /\bi\b/i.test(raw),
+    usesWe: mentionsGroup(raw),
+    usesI: mentionsSelf(raw),
     fillerHeavy: (raw.match(FILLER)?.length ?? 0) >= 3,
     statedTraits: stated,
     impliedTraits: implied,
@@ -344,16 +391,16 @@ function contentTokens(text: string) {
   return new Set(
     clean(text)
       .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .split(/\s+/)
       .filter((token) => token.length > 2 && !QUESTION_STOP.has(token)),
   );
 }
 
 function questionOnly(text: string) {
-  const mark = text.lastIndexOf('?');
+  const mark = Math.max(text.lastIndexOf('?'), text.lastIndexOf('？'));
   if (mark < 0) return text;
-  const start = text.lastIndexOf('.', mark - 1);
+  const start = Math.max(text.lastIndexOf('.', mark - 1), text.lastIndexOf('。', mark - 1));
   return text.slice(start + 1, mark + 1).trim();
 }
 
@@ -369,188 +416,156 @@ function tooSimilar(a: string, b: string) {
   return ratio >= 0.5;
 }
 
-function alreadyAsked(turns: InterviewTurn[], candidate: Candidate) {
-  const spoken = `${candidate.reaction} ${candidate.question}`;
+function fields(input: Record<string, string | undefined>): Record<string, string> | undefined {
+  const entries = Object.entries(input).filter((entry): entry is [string, string] => Boolean(entry[1]));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function heard(text: string, max = 12) {
+  const stripped = text
+    .replace(/^(yeah|yes|ok|okay|i guess|sí|si|bueno|vale|pues|嗯+|啊|那个|就是)[，,。.!?]?\s*/i, '')
+    .replace(/[.?!。！？]+$/g, '');
+  return clip(stripped, max);
+}
+
+function promptOf(candidate: Candidate): InterviewPrompt {
+  return {
+    reactionKey: candidate.reactionKey,
+    reactionVars: candidate.reactionVars,
+    questionKey: candidate.questionKey,
+    questionVars: candidate.questionVars,
+  };
+}
+
+function alreadyAsked(turns: InterviewTurn[], candidate: Candidate, lang: InterviewLang) {
+  const spoken = renderPrompt(lang, promptOf(candidate));
+  const question = generatedLine(lang, candidate.questionKey, candidate.questionVars);
   return interviewerTurns(turns)
-    .filter((turn) => turn.text !== OPENING_QUESTION && !turn.text.includes(FUN_QUESTION))
-    .some((turn) => tooSimilar(turn.text, spoken) || tooSimilar(turn.text, candidate.question));
+    .filter((turn) => turn.themeId !== 'opening' && turn.themeId !== 'opener-fun')
+    .some((turn) => tooSimilar(turn.text, spoken) || tooSimilar(turn.text, question));
 }
 
 function askedIds(turns: InterviewTurn[]) {
   return new Set(interviewerTurns(turns).map((turn) => turn.themeId).filter(Boolean) as string[]);
 }
 
-function pair(candidate: Candidate) {
-  return `${candidate.reaction} ${candidate.question}`.replace(/\s+/g, ' ').trim();
-}
-
 function candidatesFor(last: Reading, portrait: Portrait, answerIndex: number): Candidate[] {
   const out: Candidate[] = [];
-  const push = (id: string, reaction: string, question: string) => {
-    out.push({ id, reaction, question });
+  const push = (
+    id: string,
+    reactionKey: PhraseKey,
+    questionKey: PhraseKey,
+    reactionVars?: Record<string, string | undefined>,
+    questionVars?: Record<string, string | undefined>,
+  ) => {
+    out.push({
+      id,
+      reactionKey,
+      questionKey,
+      reactionVars: reactionVars ? fields(reactionVars) : undefined,
+      questionVars: questionVars ? fields(questionVars) : undefined,
+    });
   };
 
   const trait = last.statedTraits[0] ?? last.impliedTraits[0];
   const emotion = last.emotions[0];
   const motive = last.motives[0];
   const behavior = last.behaviors[0];
-  const snippet = asHeard((last.sentences[0] ?? last.raw).replace(/[.?!]+$/, ''));
+  const snippet = heard(last.sentences[0] ?? last.raw, 18);
   const job = portrait.jobInterest;
   const hobby = portrait.hobby;
 
   if (job && hobby && answerIndex >= 1) {
-    push(
-      'job-hobby-link',
-      `${hobby[0].toUpperCase()}${hobby.slice(1)} in your free time and looking at ${job} is not a random pair.`,
-      `What part of ${hobby} do you think would actually show up in ${job} work?`,
-    );
-    push(
-      'hobby-into-job',
-      `You already spend time on ${hobby}, and you want ${job}.`,
-      `When ${hobby} gets frustrating, what do you do — and is that how you'd want to work on the job too?`,
-    );
-    push(
-      'job-fit',
-      `So the job you're aiming at is ${job}.`,
-      `What about that kind of work feels like a fit with how you already like to spend your time?`,
-    );
-    push(
-      'hobby-story',
-      `I'm more interested in how you are when you're doing ${hobby} than in a generic work speech.`,
-      `Tell me about a time ${hobby} didn't go smoothly and what you did next.`,
-    );
+    push('job-hobby-link', 'link.reaction', 'link.question', { hobbyLead: hobby, hobby, job }, { hobby, job });
+    push('hobby-into-job', 'hobbyJob.reaction', 'hobbyJob.question', { hobby, job }, { hobby });
+    push('job-fit', 'jobFit.reaction', 'jobFit.question', { job });
+    push('hobby-story', 'hobbyStory.reaction', 'hobbyStory.question', { hobby }, { hobby });
   }
 
   if (last.usesWe && !last.usesI) {
-    push(
-      'need-i',
-      `I heard the group in that answer more clearly than I heard you.`,
-      `What did you personally do that someone else on the team did not?`,
-    );
+    push('need-i', 'needI.reaction', 'needI.question');
   }
 
   if (last.isShort && last.wordCount <= 3 && !(last.usesWe && !last.usesI)) {
-    push(
-      'expand-tiny',
-      `I only caught "${last.raw.replace(/[.?!]+$/, '')}."`,
-      `What were you actually trying to tell me about yourself there?`,
-    );
+    push('expand-tiny', 'tiny.reaction', 'tiny.question', { raw: last.raw.replace(/[.?!。！？]+$/g, '') });
   } else if (last.isShort) {
-    push(
-      'expand-short',
-      `That was only a start — ${snippet}.`,
-      `Can you give me one real moment that shows what you mean?`,
-    );
+    push('expand-short', 'short.reaction', 'short.question', { snippet });
   }
 
   if (last.isVague) {
-    push(
-      'clarify-vague',
-      `I'm still missing the actual picture behind ${asHeard(clip(last.raw, 8))}.`,
-      `If I watched you handle a hard hour, what would I notice about how you behave?`,
-    );
+    push('clarify-vague', 'vague.reaction', 'vague.question', { snippet: heard(last.raw, 8) });
   }
 
   if (behavior?.label === 'taking the lead in groups') {
-    push(
-      'lead-comfort',
-      `You mentioned that you tend to take the lead when working in groups.`,
-      `What do you think makes you comfortable taking on that role?`,
-    );
-    push(
-      'lead-conflict',
-      `Taking the lead in a group is different from just having ideas.`,
-      `What do you do when someone else in the group wants to go a different way?`,
-    );
+    push('lead-comfort', 'leadComfort.reaction', 'leadComfort.question');
+    push('lead-conflict', 'leadConflict.reaction', 'leadConflict.question');
   }
 
-  if (behavior?.label === 'working in groups' && behavior.label !== 'taking the lead in groups') {
-    push(
-      'group-role',
-      `You brought up working in a group, not just working alone.`,
-      `What part of that do you usually take on without being asked?`,
-    );
+  if (behavior?.label === 'working in groups') {
+    push('group-role', 'groupRole.reaction', 'groupRole.question');
   }
 
   if (last.statedTraits.length && emotion) {
     push(
       `trait-emotion:${trait?.label}:${emotion.label}`,
-      `You describe yourself as pretty ${last.statedTraits[0].label}, even when you're ${emotion.label}.`,
-      `Has there been a time when that ${last.statedTraits[0].label} side really changed the outcome of a difficult situation?`,
+      'traitEmotion.reaction',
+      'traitEmotion.question',
+      { trait: last.statedTraits[0].label, emotion: emotion.label },
+      { trait: last.statedTraits[0].label },
     );
   }
 
   if (last.statedTraits.length > 1) {
     push(
       `two-traits:${last.statedTraits.map((item) => item.label).join('+')}`,
-      `You called yourself ${last.statedTraits
-        .slice(0, 2)
-        .map((item) => item.label)
-        .join(' and ')} — those don't always show up the same way.`,
-      `When do you notice the ${last.statedTraits[0].label} side taking over, and when does the ${last.statedTraits[1].label} side?`,
+      'twoTraits.reaction',
+      'twoTraits.question',
+      { traitList: last.statedTraits.slice(0, 2).map((item) => item.label).join('|') },
+      { a: last.statedTraits[0].label, b: last.statedTraits[1].label },
     );
   } else if (last.statedTraits.length === 1 && last.hasStory) {
     push(
       `trait-story:${last.statedTraits[0].label}`,
-      `The way you tell that, ${last.statedTraits[0].label} isn't a slogan — it's how you handled ${asHeard(clip(last.sentences[last.sentences.length - 1] ?? last.raw, 10))}.`,
-      `What did you do in the moment you were most tempted to stop?`,
+      'traitStory.reaction',
+      'traitStory.question',
+      { trait: last.statedTraits[0].label, snippet: heard(last.sentences[last.sentences.length - 1] ?? last.raw, 10) },
     );
   } else if (last.statedTraits.length === 1) {
     push(
       `trait-example:${last.statedTraits[0].label}`,
-      `You named ${last.statedTraits[0].label} about yourself.`,
-      `What's a specific situation where someone else would have seen that in you?`,
+      'traitExample.reaction',
+      'traitExample.question',
+      { trait: last.statedTraits[0].label },
     );
   }
 
   if (last.impliedTraits.length && !last.statedTraits.length) {
     push(
       `implied:${last.impliedTraits[0].label}`,
-      `You didn't call yourself ${last.impliedTraits[0].label}. ${asHeard(last.impliedTraits[0].evidence).replace(/[.?!]+$/, '')} — that's ${last.impliedTraits[0].label} in practice.`,
-      `Where else has that same instinct shown up?`,
+      'implied.reaction',
+      'implied.question',
+      { trait: last.impliedTraits[0].label, evidence: heard(last.impliedTraits[0].evidence, 16) },
     );
   }
 
   if (emotion && !last.statedTraits.length) {
-    push(
-      `emotion:${emotion.label}`,
-      `The feeling in that story is ${emotion.label}, not just the task.`,
-      `When that feeling hits, what do you do next instead of walking away?`,
-    );
+    push(`emotion:${emotion.label}`, 'emotion.reaction', 'emotion.question', { emotion: emotion.label });
   }
 
   if (motive) {
-    push(
-      `motive:${motive.label}`,
-      `It sounds like the driver was ${asHeard(motive.label)}, more than the activity on the surface.`,
-      `What about that still matters to you now?`,
-    );
-    push(
-      `motive-cost:${motive.label}`,
-      `Staying with ${asHeard(motive.label)} usually costs something — time, pride, or an easier option.`,
-      `What did you give up to keep going?`,
-    );
+    push(`motive:${motive.label}`, 'motive.reaction', 'motive.question', { motive: motive.label });
+    push(`motive-cost:${motive.label}`, 'motiveCost.reaction', 'motiveCost.question', { motive: motive.label });
   }
 
   if (last.hasMethod) {
-    push(
-      'method-next',
-      `You didn't just name the problem — you said how you worked it: ${asHeard(sentenceWith(last.raw, METHOD))}.`,
-      `What told you that approach was working?`,
-    );
-    push(
-      'method-again',
-      `That is a hands-on way of learning, not a speech about trying hard.`,
-      `If you had to do that again next week, what would you change first?`,
-    );
+    push('method-next', 'methodNext.reaction', 'methodNext.question', {
+      method: heard(sentenceWith(last.raw, METHOD), 16),
+    });
+    push('method-again', 'methodAgain.reaction', 'methodAgain.question');
   }
 
   if (behavior?.label === 'helping when it is busy') {
-    push(
-      'busy-priority',
-      `Helping when it is busy says more about how you work than about the job title.`,
-      `When everything is happening at once, how do you decide what to do first?`,
-    );
+    push('busy-priority', 'busy.reaction', 'busy.question');
   }
 
   const earlier = portrait.traits.find((item) => {
@@ -563,8 +578,10 @@ function candidatesFor(last: Reading, portrait: Portrait, answerIndex: number): 
   if (earlier && answerIndex >= 1) {
     push(
       `connect:${earlier.label}:${answerIndex}`,
-      `That lines up with you talking about being ${earlier.label} earlier.`,
-      `How does being ${earlier.label} show up in what you just described?`,
+      'connect.reaction',
+      'connect.question',
+      { trait: earlier.label },
+      { trait: earlier.label },
     );
   }
 
@@ -574,42 +591,37 @@ function candidatesFor(last: Reading, portrait: Portrait, answerIndex: number): 
   if (unusedTrait) {
     push(
       `bridge:${unusedTrait.label}:${clip(last.raw, 6)}`,
-      `I'm still holding onto you being ${unusedTrait.label}, and now you're talking about ${asHeard(clip(last.raw.replace(/^(yeah|yes|ok|okay|i guess)[,.]?\s+/i, ''), 10))}.`,
-      `Do those two things pull in the same direction for you, or do they clash?`,
+      'bridge.reaction',
+      'bridge.question',
+      { trait: unusedTrait.label, snippet: heard(last.raw, 10) },
     );
   }
 
   if (last.hasStory && !last.hasOutcome) {
-    push(
-      'need-result',
-      `I can follow the situation, but not yet what changed because of you.`,
-      `How did it turn out after you stepped in?`,
-    );
+    push('need-result', 'needResult.reaction', 'needResult.question');
   }
 
   if (answerIndex >= 4) {
-    push(
-      'wrap-up',
-      portrait.jobInterest || portrait.hobby
-        ? `I'm starting to get a picture: ${[portrait.jobInterest && `you want ${portrait.jobInterest}`, portrait.hobby && `you spend free time on ${portrait.hobby}`, portrait.traits[0] && `you come across as ${portrait.traits[0].label}`]
-            .filter(Boolean)
-            .join(', ')}.`
-        : portrait.traits[0]
-          ? `The picture I'm getting is someone who is ${portrait.traits
-              .slice(0, 2)
-              .map((item) => item.label)
-              .join(' and ')}.`
-          : `You've given me a few sides of how you work.`,
-      `Before we stop, is there one more thing a hiring manager should understand about you?`,
-    );
+    if (portrait.jobInterest || portrait.hobby) {
+      push('wrap-up', 'wrap.picture', 'wrap.question', {
+        job: portrait.jobInterest,
+        hobby: portrait.hobby,
+        trait: portrait.traits[0]?.label,
+      });
+    } else if (portrait.traits[0]) {
+      push('wrap-up', 'wrap.someone', 'wrap.question', {
+        traitList: portrait.traits
+          .slice(0, 2)
+          .map((item) => item.label)
+          .join('|'),
+      });
+    } else {
+      push('wrap-up', 'wrap.sides', 'wrap.question');
+    }
   }
 
   if (out.length === 0) {
-    push(
-      `open:${clip(last.raw, 5)}`,
-      `I'm paying attention to ${snippet}.`,
-      `What about that feels most like you, not just like the situation?`,
-    );
+    push(`open:${clip(last.raw, 5)}`, 'open.reaction', 'open.question', { snippet });
   }
 
   return out;
@@ -617,144 +629,151 @@ function candidatesFor(last: Reading, portrait: Portrait, answerIndex: number): 
 
 export function nextInterviewerLine(
   turns: InterviewTurn[],
-): { kind: 'question' | 'complete'; text: string; themeId?: string } {
+  language: InterviewLang = 'en',
+): { kind: 'question' | 'complete'; text: string; themeId?: string; prompt?: InterviewPrompt } {
+  const lang = interviewGenerationRequest(language).language;
   const answers = candidateTurns(turns);
   if (answers.length >= 6) {
-    return { kind: 'complete', text: buildInterviewReview(turns) };
+    return { kind: 'complete', text: buildInterviewReview(turns, lang) };
   }
 
   const last = readAnswer(answers[answers.length - 1]?.text.trim() ?? '');
   const portrait = portraitOf(turns);
 
   if (answers.length === 1) {
-    const job = portrait.jobInterest || asHeard(clip(last.raw, 8));
-    return {
-      kind: 'question',
-      themeId: 'opener-fun',
-      text: pair({
-        id: 'opener-fun',
-        reaction: last.isShort
-          ? `I'll come back to the job side.`
-          : `So you're looking at ${job}.`,
-        question: FUN_QUESTION,
-      }),
-    };
+    const knownJob = portrait.jobInterest;
+    const prompt: InterviewPrompt =
+      last.isShort && !knownJob
+        ? { reactionKey: 'backToJob', questionKey: 'fun' }
+        : {
+            reactionKey: 'lookingAt',
+            reactionVars: { job: knownJob || heard(last.raw, 8) || 'that' },
+            questionKey: 'fun',
+          };
+    return { kind: 'question', themeId: 'opener-fun', text: renderPrompt(lang, prompt), prompt };
   }
 
   const used = askedIds(turns);
   const options = candidatesFor(last, portrait, answers.length - 1).filter(
-    (candidate) => !used.has(candidate.id) && !alreadyAsked(turns, candidate),
+    (candidate) => !used.has(candidate.id) && !alreadyAsked(turns, candidate, lang),
   );
 
-  const pick = options[0] ?? {
+  const pick: Candidate = options[0] ?? {
     id: `fresh:${answers.length}`,
-    reaction: portrait.hobby
-      ? `I don't want to lose ${portrait.hobby} or ${portrait.jobInterest || 'the job you named'}.`
-      : `I don't want to re-ask something we already covered.`,
-    question: portrait.jobInterest
-      ? `What would you want a hiring manager to understand about how you'd show up in ${portrait.jobInterest}?`
-      : `What is one thing about how you work that we have not gotten to yet?`,
+    reactionKey: portrait.hobby ? 'fresh.keep' : 'fresh.noRepeat',
+    reactionVars: portrait.hobby
+      ? { hobby: portrait.hobby, job: portrait.jobInterest || 'the job you named' }
+      : undefined,
+    questionKey: portrait.jobInterest ? 'fresh.job' : 'fresh.work',
+    questionVars: portrait.jobInterest ? { job: portrait.jobInterest } : undefined,
   };
 
-  return { kind: 'question', themeId: pick.id, text: pair(pick) };
+  const prompt = promptOf(pick);
+  return { kind: 'question', themeId: pick.id, text: renderPrompt(lang, prompt), prompt };
 }
 
-function quote(text: string) {
-  const clipped = clip(text, 24);
-  return `"${clipped}${wordCount(text) > 24 ? '...' : ''}"`;
+function quote(text: string, lang: InterviewLang) {
+  const clipped = clip(text, 24).replace(/[.?!。！？…]+$/g, '');
+  const cjk = text.match(/[\u3400-\u9fff]/g)?.length ?? 0;
+  const long = cjk >= 2 ? cjk > 48 : wordCount(text) > 24;
+  const body = `${clipped}${long ? (lang === 'zh-CN' ? '…' : '...') : ''}`;
+  if (lang === 'zh-CN') return `「${body}」`;
+  if (lang === 'es') return `«${body}»`;
+  return `"${body}"`;
 }
 
-function communicationNotes(readings: Reading[]) {
+function communicationNotes(readings: Reading[], lang: InterviewLang) {
   const notes: string[] = [];
   const avg = readings.reduce((sum, reading) => sum + reading.wordCount, 0) / Math.max(readings.length, 1);
-  if (avg < 12) {
-    notes.push(
-      'Clarity: several answers were so short an interviewer had to guess. Why it matters: they cannot hire a blank. How: add what was going on, what you did, and how it ended.',
-    );
-  } else if (avg > 70) {
-    notes.push(
-      'Conciseness: you were willing to talk at length. Why it matters: a long answer can hide the point. How: land on what you did and why before you add extra context.',
-    );
-  } else {
-    notes.push('Clarity: answer length was generally usable — enough to follow without losing the thread.');
-  }
+  if (avg < 12) notes.push(generatedLine(lang, 'comm.short'));
+  else if (avg > 70) notes.push(generatedLine(lang, 'comm.long'));
+  else notes.push(generatedLine(lang, 'comm.ok'));
 
-  if (readings.some((reading) => reading.isVague)) {
-    notes.push(
-      'Specificity: a few answers stayed general. Why it matters: vague language is forgettable. How: replace "stuff" or "the usual" with one concrete action.',
-    );
-  }
+  if (readings.some((reading) => reading.isVague)) notes.push(generatedLine(lang, 'comm.specific'));
 
   if (readings.filter((reading) => reading.hasStory).length < Math.ceil(readings.length / 2)) {
-    notes.push(
-      'Organization: some answers named a quality without a beginning, middle, and end. How: use one situation per claim.',
-    );
+    notes.push(generatedLine(lang, 'comm.organizeWeak'));
   } else {
-    notes.push('Organization: you often spoke in situations, which is easier to remember than a list of claims.');
+    notes.push(generatedLine(lang, 'comm.organizeOk'));
   }
 
-  if (readings.some((reading) => reading.fillerHeavy)) {
-    notes.push(
-      'Filler: the transcript shows repeated phrasing like "like" or "you know." Why it matters: it can make a strong point sound unsure. How: pause instead of filling the gap.',
-    );
-  }
-
-  if (readings.some((reading) => reading.usesWe && !reading.usesI)) {
-    notes.push(
-      'Ownership: group language showed up without a clear "I." Why it matters: the interviewer cannot tell what to hire. How: say the step that was yours.',
-    );
-  }
-
+  if (readings.some((reading) => reading.fillerHeavy)) notes.push(generatedLine(lang, 'comm.filler'));
+  if (readings.some((reading) => reading.usesWe && !reading.usesI)) notes.push(generatedLine(lang, 'comm.ownership'));
   return notes;
 }
 
-function growthItem(title: string, what: string, why: string, how: string, evidence?: string) {
+function growthItem(
+  lang: InterviewLang,
+  titleKey: PhraseKey,
+  whatKey: PhraseKey,
+  whyKey: PhraseKey,
+  howKey: PhraseKey,
+  vars?: Record<string, string>,
+  evidence?: string,
+) {
   return [
-    `**${title}**`,
-    `What: ${what}`,
-    `Why: ${why}`,
-    `How: ${how}`,
-    evidence ? `From this interview: ${evidence}` : null,
+    `**${generatedLine(lang, titleKey)}**`,
+    generatedLine(lang, 'label.what', { text: generatedLine(lang, whatKey, vars) }),
+    generatedLine(lang, 'label.why', { text: generatedLine(lang, whyKey, vars) }),
+    generatedLine(lang, 'label.how', { text: generatedLine(lang, howKey, vars) }),
+    evidence ? generatedLine(lang, 'label.from', { text: evidence }) : null,
   ]
     .filter(Boolean)
     .join('\n');
 }
 
-export function buildInterviewReview(turns: InterviewTurn[]): string {
+export function buildInterviewReview(turns: InterviewTurn[], language: InterviewLang = 'en'): string {
+  const lang = interviewGenerationRequest(language).language;
   const portrait = portraitOf(turns);
   const readings = portrait.readings;
   const pairs = pairedAnswers(turns);
 
   if (readings.length === 0) {
     return [
-      'Interview Overview',
-      'There was not enough spoken material yet to write a fair report.',
+      generatedLine(lang, 'header.overview'),
+      generatedLine(lang, 'empty.body'),
       '',
-      'Key Takeaways',
-      '• Answer one question with a full situation: what happened, what you did, and how it turned out.',
+      generatedLine(lang, 'header.takeaways'),
+      `• ${generatedLine(lang, 'empty.takeaway')}`,
     ].join('\n');
   }
 
   const traitList = portrait.traits.map((item) => item.label);
+  const extra = [
+    portrait.hobby ? generatedLine(lang, 'overview.hobby', { hobby: portrait.hobby }) : '',
+    traitList.length
+      ? generatedLine(lang, 'overview.traits', { traitList: traitList.slice(0, 3).join('|') })
+      : '',
+  ].join('');
   const overview =
     readings.length === 1
-      ? `This was a short exchange. You mainly said ${quote(readings[0].raw)}.`
-      : `Over ${readings.length} answers, you came across as someone interested in ${
-          portrait.jobInterest || 'work'
-        }${portrait.hobby ? `, who spends free time on ${portrait.hobby}` : ''}${
-          traitList.length ? `, and who is ${traitList.slice(0, 3).join(', ')}` : ''
-        }. The later questions followed what you actually raised, not a generic script.`;
+      ? generatedLine(lang, 'overview.one', { quote: quote(readings[0].raw, lang) })
+      : generatedLine(lang, 'overview.many', {
+          count: String(readings.length),
+          interest: portrait.jobInterest || 'work',
+          extra,
+        });
 
   const presented = [
     traitList.length
-      ? `Recurring traits: ${traitList.join(', ')}.`
-      : 'You spoke more about activities than about how you see yourself.',
-    portrait.behaviors[0] ? `How you described your behavior: ${portrait.behaviors.map((item) => item.label).join(', ')}.` : null,
-    portrait.motives[0] ? `Motivation that came through: ${portrait.motives[0].label}.` : null,
-    portrait.emotions[0]
-      ? `Emotion you were willing to name: ${portrait.emotions.map((item) => item.label).join(' and ')}.`
+      ? generatedLine(lang, 'presented.traits', { traitList: traitList.join('|') })
+      : generatedLine(lang, 'presented.activities'),
+    portrait.behaviors[0]
+      ? generatedLine(lang, 'presented.behavior', {
+          behaviorList: portrait.behaviors.map((item) => item.label).join('|'),
+        })
       : null,
-    portrait.values[0] ? `What seemed to matter to you: ${portrait.values.map((item) => item.label).join(', ')}.` : null,
+    portrait.motives[0] ? generatedLine(lang, 'presented.motive', { motive: portrait.motives[0].label }) : null,
+    portrait.emotions[0]
+      ? generatedLine(lang, 'presented.emotion', {
+          emotionList: portrait.emotions.map((item) => item.label).join('|'),
+        })
+      : null,
+    portrait.values[0]
+      ? generatedLine(lang, 'presented.values', {
+          valueList: portrait.values.map((item) => item.label).join('|'),
+        })
+      : null,
   ]
     .filter(Boolean)
     .join(' ');
@@ -763,27 +782,31 @@ export function buildInterviewReview(turns: InterviewTurn[]): string {
   const traitStory = readings.find((reading) => reading.statedTraits.length && reading.hasStory);
   if (traitStory) {
     strengths.push(
-      `You connected a self-description (${traitStory.statedTraits.map((item) => item.label).join(', ')}) to a real moment. Evidence: ${quote(traitStory.raw)} That is stronger than listing adjectives alone.`,
+      generatedLine(lang, 'strength.traitStory', {
+        traitList: traitStory.statedTraits.map((item) => item.label).join('|'),
+        quote: quote(traitStory.raw, lang),
+      }),
     );
   }
   const implied = readings.find((reading) => reading.impliedTraits.length);
   if (implied) {
     strengths.push(
-      `Your behavior showed a trait even when you did not label it (${implied.impliedTraits[0].label}). Evidence: ${quote(implied.impliedTraits[0].evidence)}`,
+      generatedLine(lang, 'strength.implied', {
+        trait: implied.impliedTraits[0].label,
+        quote: quote(implied.impliedTraits[0].evidence, lang),
+      }),
     );
   }
   const method = readings.find((reading) => reading.hasMethod);
   if (method) {
-    strengths.push(`You explained what you actually did next, not only that something was hard. Evidence: ${quote(method.raw)}`);
+    strengths.push(generatedLine(lang, 'strength.method', { quote: quote(method.raw, lang) }));
   }
   const motive = readings.find((reading) => reading.motives.length);
   if (motive) {
-    strengths.push(
-      `You gave a reason, not just an event, which helps someone understand your judgment. Evidence: ${quote(motive.motives[0].evidence)}`,
-    );
+    strengths.push(generatedLine(lang, 'strength.motive', { quote: quote(motive.motives[0].evidence, lang) }));
   }
   if (strengths.length === 0) {
-    strengths.push(`You stayed in the conversation and answered in your own words rather than reciting a script. Evidence: ${quote(readings[0].raw)}`);
+    strengths.push(generatedLine(lang, 'strength.fallback', { quote: quote(readings[0].raw, lang) }));
   }
 
   const growth: string[] = [];
@@ -791,11 +814,13 @@ export function buildInterviewReview(turns: InterviewTurn[]): string {
     const trait = readings.find((reading) => reading.statedTraits.length)?.statedTraits[0];
     growth.push(
       growthItem(
-        'Be more specific with examples',
-        `You described yourself as ${trait?.label}, but you did not walk through a situation with a beginning, your action, and a result.`,
-        'A hiring manager cannot tell the difference between a trait you have and a trait you wish you had.',
-        'Pick one moment. Say what was going wrong, what you did, and what changed.',
-        trait ? quote(trait.evidence) : undefined,
+        lang,
+        'growth.specific.title',
+        'growth.specific.what',
+        'growth.specific.why',
+        'growth.specific.how',
+        trait ? { trait: trait.label } : undefined,
+        trait ? quote(trait.evidence, lang) : undefined,
       ),
     );
   }
@@ -803,11 +828,13 @@ export function buildInterviewReview(turns: InterviewTurn[]): string {
     const sample = readings.find((reading) => reading.usesWe && !reading.usesI);
     growth.push(
       growthItem(
-        'Name your role',
-        'At least one answer stayed with "we," so your personal work was hard to see.',
-        'Interviewers hire a person, not a whole group.',
-        'After you mention the team, add one sentence that starts with "I" and names your step.',
-        sample ? quote(sample.raw) : undefined,
+        lang,
+        'growth.role.title',
+        'growth.role.what',
+        'growth.role.why',
+        'growth.role.how',
+        undefined,
+        sample ? quote(sample.raw, lang) : undefined,
       ),
     );
   }
@@ -815,109 +842,103 @@ export function buildInterviewReview(turns: InterviewTurn[]): string {
     const sample = readings.find((reading) => reading.isShort || reading.isVague);
     growth.push(
       growthItem(
-        'Develop thin answers',
-        'At least one response was too brief or too general to use.',
-        'Short or vague answers force the interviewer to invent the rest — and they may invent the wrong thing.',
-        'Use three beats: situation, what you did, how it turned out.',
-        sample ? quote(sample.raw) : undefined,
+        lang,
+        'growth.thin.title',
+        'growth.thin.what',
+        'growth.thin.why',
+        'growth.thin.how',
+        undefined,
+        sample ? quote(sample.raw, lang) : undefined,
       ),
     );
   }
   if (traitList.length && !readings.some((reading) => reading.hasOutcome)) {
     growth.push(
-      growthItem(
-        'Connect traits to results',
-        `You came across as ${traitList[0]}, but we did not hear a time that trait changed the outcome.`,
-        'Persistence or competitiveness only lands if something was different because you stayed with it.',
-        'End the story with the result: what worked, what you learned, or what you would do again.',
-      ),
+      growthItem(lang, 'growth.results.title', 'growth.results.what', 'growth.results.why', 'growth.results.how', {
+        trait: traitList[0],
+      }),
     );
   }
   if (readings.some((reading) => reading.hasStory && !reading.hasMethod && !reading.statedTraits.length)) {
     const sample = readings.find((reading) => reading.hasStory && !reading.hasMethod && !reading.statedTraits.length);
     growth.push(
       growthItem(
-        'Say what you did, not only what happened',
-        'Some stories described a problem without your specific steps.',
-        'The interviewer needs a behavior they can picture you repeating at work.',
-        'Add the action: asked, tested, stayed, split the work, checked again.',
-        sample ? quote(sample.raw) : undefined,
+        lang,
+        'growth.action.title',
+        'growth.action.what',
+        'growth.action.why',
+        'growth.action.how',
+        undefined,
+        sample ? quote(sample.raw, lang) : undefined,
       ),
     );
   }
   if (growth.length === 0) {
-    growth.push(
-      growthItem(
-        'Tie the same behavior to the job',
-        'You already gave usable material, but it still lives in the past tense of the story.',
-        'Hiring managers want to know the behavior will show up on a shift, not only in the example.',
-        'Close with one sentence: how that same approach would show up in the first month of work.',
-      ),
-    );
+    growth.push(growthItem(lang, 'growth.tie.title', 'growth.tie.what', 'growth.tie.why', 'growth.tie.how'));
   }
 
-  const comm = communicationNotes(readings);
-
+  const comm = communicationNotes(readings, lang);
   const perQuestion = pairs
     .map((pairItem, index) => {
       const reading = readAnswer(pairItem.answer);
       const worked = reading.statedTraits.length
-        ? `You revealed how you see yourself (${reading.statedTraits.map((item) => item.label).join(', ')}).`
+        ? generatedLine(lang, 'worked.traits', {
+            traitList: reading.statedTraits.map((item) => item.label).join('|'),
+          })
         : reading.behaviors.length
-          ? `You described an actual way you behave (${reading.behaviors[0].label}).`
+          ? generatedLine(lang, 'worked.behavior', { behavior: reading.behaviors[0].label })
           : reading.hasStory
-            ? `You offered a situation instead of a one-word claim.`
-            : `You answered in your own words.`;
-      const improve = reading.isShort
-        ? `The answer was too brief to hang onto.`
-        : reading.isVague
-          ? `The language stayed general, so the meaning was easy to miss.`
-          : !reading.usesI && reading.usesWe
-            ? `Your personal role was unclear.`
-            : !reading.hasOutcome && reading.hasStory
-              ? `We heard the struggle more clearly than the result.`
-              : `You could add one sentence about what you would do the same way at work.`;
-      const suggestion = reading.isShort
-        ? `Restart with: "One time I... I did... and it ended with..."`
-        : `Keep the same story, and add what you personally did and what changed because of it.`;
+            ? generatedLine(lang, 'worked.story')
+            : generatedLine(lang, 'worked.words');
+      const improve =
+        reading.isShort
+          ? generatedLine(lang, 'improve.brief')
+          : reading.isVague
+            ? generatedLine(lang, 'improve.vague')
+            : !reading.usesI && reading.usesWe
+              ? generatedLine(lang, 'improve.role')
+              : !reading.hasOutcome && reading.hasStory
+                ? generatedLine(lang, 'improve.result')
+                : generatedLine(lang, 'improve.work');
+      const suggestion = reading.isShort ? generatedLine(lang, 'suggest.short') : generatedLine(lang, 'suggest.keep');
       return [
         `${index + 1}. ${clip(questionOnly(pairItem.question), 20)}`,
-        `   You said: ${quote(pairItem.answer)}`,
-        `   What worked: ${worked}`,
-        `   What could be stronger: ${improve}`,
-        `   Try this: ${suggestion}`,
+        `   ${generatedLine(lang, 'per.youSaid', { quote: quote(pairItem.answer, lang) })}`,
+        `   ${generatedLine(lang, 'per.worked', { text: worked })}`,
+        `   ${generatedLine(lang, 'per.stronger', { text: improve })}`,
+        `   ${generatedLine(lang, 'per.try', { text: suggestion })}`,
       ].join('\n');
     })
     .join('\n\n');
 
   const takeaways = [
     traitList[0]
-      ? `If you lead with ${traitList[0]}, immediately back it with a moment.`
-      : `Pick one sentence about how you work, then prove it with a story.`,
-    `In group stories, say "I" for your part.`,
-    `End with a result: what changed because you stayed with it.`,
+      ? generatedLine(lang, 'take.lead', { trait: traitList[0] })
+      : generatedLine(lang, 'take.pick'),
+    generatedLine(lang, 'take.group'),
+    generatedLine(lang, 'take.result'),
   ];
 
   return [
-    'Interview Overview',
+    generatedLine(lang, 'header.overview'),
     overview,
     '',
-    'How You Presented Yourself',
+    generatedLine(lang, 'header.presented'),
     presented,
     '',
-    'Strengths',
+    generatedLine(lang, 'header.strengths'),
     strengths.map((item, index) => `${index + 1}. ${item}`).join('\n'),
     '',
-    'Areas for Improvement',
+    generatedLine(lang, 'header.growth'),
     growth.map((item, index) => `${index + 1}. ${item}`).join('\n\n'),
     '',
-    'Communication Feedback',
+    generatedLine(lang, 'header.communication'),
     comm.map((item) => `• ${item}`).join('\n'),
     '',
-    'Question-by-Question Feedback',
-    perQuestion || 'Not enough full question-and-answer pairs to review one by one.',
+    generatedLine(lang, 'header.perQuestion'),
+    perQuestion || generatedLine(lang, 'per.empty'),
     '',
-    'Key Takeaways',
+    generatedLine(lang, 'header.takeaways'),
     takeaways.map((item) => `• ${item}`).join('\n'),
   ].join('\n');
 }

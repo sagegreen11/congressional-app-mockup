@@ -69,11 +69,11 @@ export function stopListening() {
   recognition = null;
 }
 
-export function speakAloud(text: string): Promise<void> {
+export function speakAloud(text: string, language = 'en-US'): Promise<void> {
   stopSpeaking();
   return new Promise((resolve) => {
     Speech.speak(text, {
-      language: 'en-US',
+      language,
       rate: 0.94,
       pitch: 1,
       onDone: () => resolve(),
@@ -83,7 +83,7 @@ export function speakAloud(text: string): Promise<void> {
   });
 }
 
-export function listenOnce(onPartial?: (text: string) => void): Promise<string> {
+export function listenOnce(onPartial?: (text: string) => void, language = 'en-US'): Promise<string> {
   const Ctor = getRecognitionCtor();
   if (!Ctor) {
     return Promise.reject(new Error('Voice listening needs Chrome, Edge, or Safari on the web app.'));
@@ -94,7 +94,7 @@ export function listenOnce(onPartial?: (text: string) => void): Promise<string> 
   return new Promise((resolve, reject) => {
     const rec = new Ctor();
     recognition = rec;
-    rec.lang = 'en-US';
+    rec.lang = language;
     rec.continuous = false;
     rec.interimResults = true;
     rec.maxAlternatives = 1;

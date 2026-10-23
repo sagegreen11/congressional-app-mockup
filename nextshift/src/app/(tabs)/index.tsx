@@ -21,10 +21,10 @@ export default function HomeScreen() {
       <View style={styles.canvas} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         <View style={styles.hero}>
           <Text style={styles.headline}>{`Finding\nyour\nnext\ndirection`}</Text>
-          <ShoeMark width={150} height={108} />
+          <ShoeMark width={188} height={136} />
         </View>
 
-        <View style={[styles.triangleWrap, { pointerEvents: 'none' }]}>
+        <View style={styles.triangleWrap}>
           <View
             style={[
               styles.triangle,
@@ -34,18 +34,6 @@ export default function HomeScreen() {
               },
             ]}
           />
-        </View>
-
-        <View style={styles.links}>
-          <Pressable onPress={() => router.push('/jobs')}>
-            <Text style={styles.link}>Jobs near you</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/resources')}>
-            <Text style={styles.link}>Resources</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/prepare')}>
-            <Text style={styles.link}>Prepare</Text>
-          </Pressable>
         </View>
       </View>
     </Screen>
@@ -61,13 +49,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: 28,
     zIndex: 1,
   },
   headline: {
     fontFamily: fonts.serif,
-    fontSize: 38,
-    lineHeight: 42,
+    fontSize: 54,
+    lineHeight: 58,
     color: colors.brown,
   },
   triangleWrap: {
@@ -84,19 +72,5 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: colors.brown,
-  },
-  links: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 44,
-    alignItems: 'center',
-    gap: 12,
-    zIndex: 2,
-  },
-  link: {
-    fontFamily: fonts.serifItalic,
-    fontSize: 20,
-    color: colors.cream,
   },
 });

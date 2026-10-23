@@ -7,9 +7,18 @@ import { ShoeMark } from '@/components/shoe-mark';
 import {
   buildInterviewReview,
   nextInterviewerLine,
-  OPENING_QUESTION,
   type InterviewTurn,
 } from '@/lib/interview-engine';
+import {
+  generatedLine,
+  INTERVIEW_LANGS,
+  renderPrompt,
+  speechCode,
+  ui,
+  type InterviewLang,
+  type InterviewPrompt,
+  type InterviewUiKey,
+} from '@/lib/interview-locale';
 import {
   canListen,
   listenOnce,
@@ -20,8 +29,12 @@ import {
 } from '@/lib/interview-voice';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
-type Message = { id: string; from: 'coach' | 'you'; text: string };
+type Message = { id: string; from: 'coach' | 'you'; text: string; prompt?: InterviewPrompt };
 type Phase = 'idle' | 'speaking' | 'listening' | 'thinking' | 'done';
+type StatusKey = Extract<
+  InterviewUiKey,
+  'ready' | 'speaking' | 'needWeb' | 'yourTurn' | 'missed' | 'micBlocked' | 'thinking' | 'complete' | 'allowMic'
+>;
 
 export default function InterviewScreen() {
   const [started, setStarted] = useState(false);
@@ -29,12 +42,13 @@ export default function InterviewScreen() {
   const [draft, setDraft] = useState('');
   const [partial, setPartial] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
-  const [status, setStatus] = useState('When you are ready, start a short practice interview for an entry-level role.');
+  const [statusKey, setStatusKey] = useState<StatusKey>('ready');
+  const [lang, setLang] = useState<InterviewLang>('en');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'm0',
       from: 'coach',
-      text: 'When you are ready, start a short practice interview for an entry-level role.',
+      text: '',
     },
   ]);
 
@@ -42,8 +56,20 @@ export default function InterviewScreen() {
   const turnsRef = useRef<InterviewTurn[]>([]);
   const finishedRef = useRef(false);
   const messagesRef = useRef(messages);
+  const langRef = useRef(lang);
   const scrollRef = useRef<ScrollView>(null);
   messagesRef.current = messages;
+  langRef.current = lang;
+
+  const voiceLang = () => speechCode(langRef.current);
+  const chooseLang = (next: InterviewLang) => {
+    langRef.current = next;
+    setLang(next);
+  };
+  const projectTurns = (language: InterviewLang): InterviewTurn[] =>
+    turnsRef.current.map((turn) =>
+      turn.prompt ? { ...turn, text: renderPrompt(language, turn.prompt) } : turn,
+    );
 
   useEffect(() => {
     return () => {
@@ -55,20 +81,29 @@ export default function InterviewScreen() {
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages, partial, status]);
+  }, [messages, partial, statusKey, lang]);
 
   const toTurns = (list: Message[]): InterviewTurn[] =>
     list
-      .filter((message) => message.id !== 'm0')
+      .filter((message) => message.id !== 'm0' && message.id !== 'review')
       .map((message) => ({
-        role: message.from === 'coach' ? 'interviewer' : 'candidate',
-        text: message.text,
+        role: message.from === 'coach' ? ('interviewer' as const) : ('candidate' as const),
+        text: message.prompt ? renderPrompt(langRef.current, message.prompt) : message.text,
+        prompt: message.prompt,
+        themeId: message.id === 'q-0' ? 'opening' : undefined,
       }));
 
-  const speakThenListen = async (session: number, question: string) => {
+  const bubbleText = (message: Message) => {
+    if (message.id === 'm0') return ui(lang, 'ready');
+    if (message.id === 'review') return buildInterviewReview(projectTurns(lang), lang);
+    if (message.from === 'coach' && message.prompt) return renderPrompt(lang, message.prompt);
+    return message.text;
+  };
+
+  const speakThenListen = async (session: number, prompt: InterviewPrompt) => {
     setPhase('speaking');
-    setStatus('The interviewer is speaking.');
-    await speakAloud(question);
+    setStatusKey('speaking');
+    await speakAloud(renderPrompt(langRef.current, prompt), voiceLang());
     if (session !== sessionRef.current) return;
     await captureAnswer(session);
   };
@@ -76,20 +111,20 @@ export default function InterviewScreen() {
   const captureAnswer = async (session: number) => {
     if (!canListen()) {
       setPhase('listening');
-      setStatus('Voice listening needs the web app in Chrome or Edge. You can also type your answer.');
+      setStatusKey('needWeb');
       return;
     }
     setPhase('listening');
     setPartial('');
-    setStatus('Your turn — speak your answer.');
+    setStatusKey('yourTurn');
     try {
       const heard = await listenOnce((text) => {
         if (session === sessionRef.current) setPartial(text);
-      });
+      }, voiceLang());
       if (session !== sessionRef.current) return;
       setPartial('');
       if (!heard) {
-        setStatus('I did not catch that. Tap Speak and try again, or type your answer.');
+        setStatusKey('missed');
         setPhase('listening');
         return;
       }
@@ -98,7 +133,7 @@ export default function InterviewScreen() {
       if (session !== sessionRef.current) return;
       setPartial('');
       setPhase('listening');
-      setStatus('Microphone was blocked or unavailable. Allow the mic, tap Speak, or type your answer.');
+      setStatusKey('micBlocked');
     }
   };
 
@@ -107,11 +142,11 @@ export default function InterviewScreen() {
     if (!trimmed || finishedRef.current) return;
 
     setPhase('thinking');
-    setStatus('Listening to what you said and preparing a follow-up.');
+    setStatusKey('thinking');
     const you: Message = { id: `a-${Date.now()}`, from: 'you', text: trimmed };
     const withYou = [...messagesRef.current.filter((message) => message.id !== 'm0'), you];
-    turnsRef.current = [...turnsRef.current, { role: 'candidate', text: trimmed }];
-    const next = nextInterviewerLine(turnsRef.current);
+    turnsRef.current = [...projectTurns(langRef.current), { role: 'candidate', text: trimmed }];
+    const next = nextInterviewerLine(turnsRef.current, langRef.current);
 
     if (next.kind === 'complete') {
       finishedRef.current = true;
@@ -119,20 +154,20 @@ export default function InterviewScreen() {
       setFinished(true);
       setStarted(true);
       setPhase('done');
-      setStatus('Interview complete. Read the overview below.');
+      setStatusKey('complete');
       setDraft('');
-      await speakAloud('Thank you. I put a written overview of this interview on the screen.');
+      await speakAloud(generatedLine(langRef.current, 'thanks'), voiceLang());
       return;
     }
 
     turnsRef.current = [
       ...turnsRef.current,
-      { role: 'interviewer', text: next.text, themeId: next.themeId },
+      { role: 'interviewer', text: next.text, themeId: next.themeId, prompt: next.prompt },
     ];
-    setMessages([...withYou, { id: `q-${Date.now()}`, from: 'coach', text: next.text }]);
+    setMessages([...withYou, { id: `q-${Date.now()}`, from: 'coach', text: next.text, prompt: next.prompt }]);
     setDraft('');
-    if (session !== sessionRef.current) return;
-    await speakThenListen(session, next.text);
+    if (session !== sessionRef.current || !next.prompt) return;
+    await speakThenListen(session, next.prompt);
   };
 
   const start = async () => {
@@ -145,16 +180,18 @@ export default function InterviewScreen() {
     setFinished(false);
     setDraft('');
     setPartial('');
-    const opening: Message = { id: 'q-0', from: 'coach', text: OPENING_QUESTION };
+    const openingPrompt: InterviewPrompt = { questionKey: 'opening' };
+    const openingText = renderPrompt(langRef.current, openingPrompt);
+    const opening: Message = { id: 'q-0', from: 'coach', text: openingText, prompt: openingPrompt };
     setMessages([opening]);
-    turnsRef.current = [{ role: 'interviewer', text: OPENING_QUESTION }];
+    turnsRef.current = [{ role: 'interviewer', text: openingText, themeId: 'opening', prompt: openingPrompt }];
     const mic = requestMicrophone().catch(() => {
       if (session === sessionRef.current) {
-        setStatus('Allow the microphone to speak your answers, or type them.');
+        setStatusKey('allowMic');
       }
     });
     if (session !== sessionRef.current) return;
-    await speakThenListen(session, OPENING_QUESTION);
+    await speakThenListen(session, openingPrompt);
     await mic;
   };
 
@@ -178,29 +215,30 @@ export default function InterviewScreen() {
     stopListening();
     stopSpeaking();
     finishedRef.current = true;
-    const review = buildInterviewReview(turnsRef.current.length ? turnsRef.current : toTurns(messagesRef.current));
+    const source = turnsRef.current.length ? projectTurns(langRef.current) : toTurns(messagesRef.current);
+    const review = buildInterviewReview(source, langRef.current);
     setMessages((current) => [
-      ...current.filter((message) => message.id !== 'm0'),
+      ...current.filter((message) => message.id !== 'm0' && message.id !== 'review'),
       { id: 'review', from: 'coach', text: review },
     ]);
     setFinished(true);
     setPhase('done');
-    setStatus('Interview complete. Read the overview below.');
-    await speakAloud('Thank you. I put a written overview of this interview on the screen.');
+    setStatusKey('complete');
+    await speakAloud(generatedLine(langRef.current, 'thanks'), voiceLang());
   };
 
   return (
     <Screen>
       <View style={styles.top}>
         <ShoeMark width={110} height={78} />
-        <Text style={styles.title}>Interview AI</Text>
+        <Text style={styles.title}>{ui(lang, 'title')}</Text>
       </View>
       <ScrollView ref={scrollRef} style={styles.chat} contentContainerStyle={styles.chatContent}>
         {messages.map((message) => (
           <View
             key={message.id}
             style={[styles.bubble, message.from === 'you' ? styles.you : styles.coach]}>
-            <Text style={styles.bubbleText}>{message.text}</Text>
+            <Text style={styles.bubbleText}>{bubbleText(message)}</Text>
           </View>
         ))}
         {partial ? (
@@ -210,33 +248,48 @@ export default function InterviewScreen() {
         ) : null}
       </ScrollView>
       <View style={styles.controls}>
-        <Text style={styles.status}>{status}</Text>
+        <View style={styles.langRow}>
+          {INTERVIEW_LANGS.map((item) => {
+            const on = lang === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                onPress={() => chooseLang(item.id)}
+                style={[styles.langBtn, on && styles.langBtnOn]}>
+                <Text style={[styles.langBtnText, on && styles.langBtnTextOn]}>{item.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.status}>{ui(lang, statusKey)}</Text>
         {!started ? (
-          <PrimaryButton label="Start" onPress={start} />
+          <PrimaryButton label={ui(lang, 'start')} onPress={start} />
         ) : (
           <>
             <View style={styles.inputRow}>
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
-                placeholder="Type an answer"
+                placeholder={ui(lang, 'typeAnswer')}
                 placeholderTextColor={colors.prototype}
                 style={styles.input}
                 editable={!finished}
               />
               <Pressable onPress={submitTyped} style={styles.send} disabled={finished}>
-                <Text style={styles.sendText}>Send</Text>
+                <Text style={styles.sendText}>{ui(lang, 'send')}</Text>
               </Pressable>
             </View>
             <PrimaryButton
-              label={phase === 'listening' ? 'Listening...' : 'Speak'}
+              label={phase === 'listening' ? ui(lang, 'listening') : ui(lang, 'speak')}
               onPress={onSpeakPress}
               disabled={finished || phase === 'speaking' || phase === 'thinking'}
             />
             <View style={styles.row}>
-              <PrimaryButton label="Restart" tone="cream" style={{ flex: 1 }} onPress={start} />
+              <PrimaryButton label={ui(lang, 'restart')} tone="cream" style={{ flex: 1 }} onPress={start} />
               {started && !finished ? (
-                <PrimaryButton label="Finish" tone="blue" style={{ flex: 1 }} onPress={finishInterview} />
+                <PrimaryButton label={ui(lang, 'finish')} tone="blue" style={{ flex: 1 }} onPress={finishInterview} />
               ) : null}
             </View>
           </>
@@ -289,6 +342,34 @@ const styles = StyleSheet.create({
   controls: {
     padding: spacing.lg,
     gap: 10,
+  },
+  langRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  langBtn: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.mutedBlue,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langBtnOn: {
+    backgroundColor: colors.blue,
+    borderColor: colors.blue,
+  },
+  langBtnText: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+    color: colors.brown,
+  },
+  langBtnTextOn: {
+    color: colors.ink,
   },
   status: {
     fontFamily: fonts.sans,

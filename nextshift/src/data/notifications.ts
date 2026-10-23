@@ -9,19 +9,19 @@ export const notifications: AppNotification[] = [
   {
     id: 'n1',
     title: 'Local job',
-    body: 'New grocery associate opening in Hackensack.',
+    body: 'Walmart stocker opening in Saddle Brook.',
     time: '2h ago',
   },
   {
     id: 'n2',
     title: 'Local job',
-    body: 'Café crew shifts posted in Fort Lee.',
+    body: 'Whole Foods flex shopper shifts posted in Edgewater.',
     time: 'Yesterday',
   },
   {
     id: 'n3',
     title: 'Local job',
-    body: 'Library page hours added near Main Street.',
+    body: 'Part-time library assistant hours added in Jersey City.',
     time: 'Mon',
   },
 ];

@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MapPreview } from '@/components/map-preview';
@@ -7,20 +7,30 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Screen } from '@/components/screen';
 import { SearchBar } from '@/components/search-bar';
 import { googleDirectionsAppUrl, type TravelMode } from '@/lib/google-maps';
+import { BERGEN_ORIGIN, coordsForDestination, estimateTravelTimes, readDeviceOrigin } from '@/lib/travel-times';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
-
-const MODE_TIMES: Record<TravelMode, string> = {
-  walk: '18 min',
-  bus: '12 min',
-  train: '22 min',
-};
 
 export default function DirectionsScreen() {
   const { name, address } = useLocalSearchParams<{ name?: string; address?: string }>();
   const [destination, setDestination] = useState(name || 'Hackensack, NJ');
   const [mode, setMode] = useState<TravelMode>('bus');
+  const [origin, setOrigin] = useState(BERGEN_ORIGIN);
   const line = address || 'Bergen County, NJ';
   const query = address || destination || line;
+  const times = useMemo(
+    () => estimateTravelTimes(origin, coordsForDestination(address || query, destination)),
+    [address, destination, origin, query],
+  );
+
+  useEffect(() => {
+    let active = true;
+    readDeviceOrigin().then((coords) => {
+      if (active) setOrigin(coords);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Screen>
@@ -33,7 +43,7 @@ export default function DirectionsScreen() {
             <Mode
               key={item}
               label={item}
-              value={MODE_TIMES[item]}
+              value={times[item]}
               selected={mode === item}
               onPress={() => setMode(item)}
             />

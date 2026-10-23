@@ -30,10 +30,9 @@ export default function JobDetailScreen() {
         <View style={styles.panel}>
           <Text style={styles.body}>{job.summary}</Text>
           <Text style={styles.meta}>{job.location}</Text>
-          <Text style={styles.meta}>{job.pay} · {job.type}</Text>
-          <Text style={styles.meta}>{job.transit}</Text>
+          <Text style={styles.meta}>{[job.pay, job.type].filter(Boolean).join(' · ')}</Text>
+          {job.transit ? <Text style={styles.meta}>{job.transit}</Text> : null}
           {job.entryLevel ? <Text style={styles.badge}>Entry-level</Text> : null}
-          <Text style={styles.prototype}>Prototype posting · not a live job listing</Text>
         </View>
         <PrimaryButton
           label={isSaved(job.id) ? 'Saved' : 'Save job'}
@@ -103,11 +102,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.brown,
     marginTop: 4,
-  },
-  prototype: {
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    color: colors.prototype,
-    marginTop: 8,
   },
 });

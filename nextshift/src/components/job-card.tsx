@@ -34,9 +34,21 @@ export function JobCard({ job, saved, onPress, onSave, compact }: JobCardProps) 
             <Text style={styles.tagText}>Entry-level</Text>
           </View>
         ) : null}
-        <View style={styles.tag}>
-          <Text style={styles.tagText}>{job.transit}</Text>
-        </View>
+        {job.pay ? (
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{job.pay}</Text>
+          </View>
+        ) : null}
+        {job.type ? (
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{job.type}</Text>
+          </View>
+        ) : null}
+        {job.transit ? (
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{job.transit}</Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );

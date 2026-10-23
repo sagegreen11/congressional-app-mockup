@@ -11,6 +11,7 @@ const items = [
   { href: '/prepare/resume', title: 'Resume Assistant', icon: 'document-text-outline' as const },
   { href: '/prepare/videos', title: 'Prep Videos', icon: 'play-outline' as const },
   { href: '/prepare/walkthrough', title: 'Application Walkthrough', icon: 'list-outline' as const },
+  { href: '/prepare/typing', title: 'Typing Practice', icon: 'keypad-outline' as const },
 ];
 
 export default function PrepareScreen() {

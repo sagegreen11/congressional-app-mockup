@@ -5,8 +5,9 @@ import { useFonts } from 'expo-font';
 import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
+import { LoadingScreen } from '@/components/loading-screen';
 import { PhoneShell } from '@/components/phone-shell';
 import { SavedProvider } from '@/context/saved-context';
 import { colors } from '@/theme/tokens';
@@ -27,6 +28,7 @@ const navTheme = {
 };
 
 export default function RootLayout() {
+  const [booted, setBooted] = useState(false);
   const [loaded] = useFonts({
     PlayfairDisplay_400Regular_Italic,
     PlayfairDisplay_500Medium,
@@ -52,9 +54,13 @@ export default function RootLayout() {
       <ThemeProvider value={navTheme}>
         <StatusBar style="dark" />
         <PhoneShell>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.cream } }}>
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+          {booted ? (
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.cream } }}>
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          ) : (
+            <LoadingScreen onFinished={() => setBooted(true)} />
+          )}
         </PhoneShell>
       </ThemeProvider>
     </SavedProvider>

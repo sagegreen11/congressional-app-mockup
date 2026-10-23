@@ -4,8 +4,8 @@ import { Screen } from '@/components/screen';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
 const applications = [
-  { id: 'a1', role: 'Grocery Associate', place: 'Village Market Co-op', status: 'Submitted' },
-  { id: 'a2', role: 'Café Crew', place: 'Bridgeview Coffee', status: 'In progress' },
+  { id: 'a1', role: 'Stocker', place: 'Walmart', status: 'Submitted' },
+  { id: 'a2', role: 'Store Cashier/Stocker', place: 'ALDI', status: 'In progress' },
 ];
 
 export default function ApplicationsScreen() {
