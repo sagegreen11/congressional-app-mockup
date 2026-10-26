@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+# Static web output. npm run deploy publishes dist to the gh-pages branch.
 dist/
 web-build/
 expo-env.d.ts
