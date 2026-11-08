@@ -97,6 +97,52 @@ const UI = {
     'Permite el micrófono para decir tus respuestas, o escríbelas.',
     '请允许使用麦克风来回答，或直接输入。',
   ),
+  preparing: pack('Preparing a response.', 'Preparando una respuesta.', '正在准备回答。'),
+  coachUnavailable: pack(
+    'The career coach is unavailable right now. Nothing was invented in its place.',
+    'El orientador no está disponible ahora. No se inventó una respuesta.',
+    '职业助手暂时不可用。这里没有用编造的回答代替。',
+  ),
+  checkTranscript: pack(
+    'Check the words below, edit them if needed, then press Send.',
+    'Revisa las palabras, corrígelas si hace falta y pulsa Enviar.',
+    '请核对下面的文字，需要的话改一改，然后点发送。',
+  ),
+  heardLocally: pack(
+    'The speech service could not transcribe that. These are the words this browser heard. Edit them and press Send.',
+    'El servicio de voz no pudo transcribirlo. Estas son las palabras que oyó el navegador. Corrígela y pulsa Enviar.',
+    '语音服务没能转写。下面是浏览器听到的文字。改好后点发送。',
+  ),
+  audioUnavailable: pack(
+    'The written answer is ready. This device will read it aloud.',
+    'La respuesta escrita ya está. Este dispositivo la leerá en voz alta.',
+    '文字回答已经显示。这台设备会把它读出来。',
+  ),
+  play: pack('Play', 'Reproducir', '播放'),
+  pause: pack('Pause', 'Pausa', '暂停'),
+  replay: pack('Replay', 'Otra vez', '重播'),
+  soundOn: pack('Sound on', 'Sonido', '声音开'),
+  soundOff: pack('Sound off', 'Sin sonido', '声音关'),
+  rateLimited: pack(
+    'Too many requests. Wait a moment and try again.',
+    'Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.',
+    '请求太频繁了。请稍等再试。',
+  ),
+  missingKey: pack(
+    'The coach is not configured on the server yet. Add a Gemini API key and restart.',
+    'El orientador aún no está configurado en el servidor. Agrega una clave de Gemini y reinicia.',
+    '服务器上还没有配置面试助手。请添加 Gemini 密钥后重新启动。',
+  ),
+  invalidKey: pack(
+    'The Gemini API key was rejected. Check the key and restart the server.',
+    'La clave de Gemini fue rechazada. Revísala y reinicia el servidor.',
+    'Gemini 密钥被拒绝。请检查密钥并重新启动服务器。',
+  ),
+  modelUnavailable: pack(
+    'The configured Gemini model is not available right now.',
+    'El modelo de Gemini configurado no está disponible ahora.',
+    '当前配置的 Gemini 模型暂时不可用。',
+  ),
 };
 
 export type InterviewUiKey = keyof typeof UI;
