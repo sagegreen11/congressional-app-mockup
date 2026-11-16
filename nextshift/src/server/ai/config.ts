@@ -20,8 +20,10 @@ export function geminiKey() {
 }
 
 export function geminiModel() {
-  const configured = read('GEMINI_MODEL');
-  if (!configured || configured === 'gemini-3.8-flash') return 'gemini-3.5-flash';
+  const configured = read('GEMINI_MODEL').replace(/\s+/g, '-');
+  if (!configured || configured === 'gemini-3.8-flash' || configured === 'gemini-3.5-flash') {
+    return 'gemini-3.5-flash-lite';
+  }
   return configured;
 }
 

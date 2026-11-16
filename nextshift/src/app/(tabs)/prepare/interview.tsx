@@ -4,8 +4,13 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { PrimaryButton } from '@/components/primary-button';
 import { Screen } from '@/components/screen';
 import { ShoeMark } from '@/components/shoe-mark';
-import { AiClientError, requestCoachReply, requestSpeech, type CoachTurn } from '@/lib/ai-client';
-import { INTERVIEW_LANGS, speechCode, ui, type InterviewLang, type InterviewUiKey } from '@/lib/interview-locale';
+import { requestCoachReply, type CoachTurn } from '@/lib/ai-client';
+import {
+  buildInterviewReview,
+  nextInterviewerLine,
+  type InterviewTurn,
+} from '@/lib/interview-engine';
+import { INTERVIEW_LANGS, openingQuestion, speechCode, ui, type InterviewLang, type InterviewUiKey } from '@/lib/interview-locale';
 import {
   canListen,
   listenOnce,
@@ -16,7 +21,7 @@ import {
 } from '@/lib/interview-voice';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
-type Message = { id: string; from: 'coach' | 'you'; text: string };
+type Message = { id: string; from: 'coach' | 'you'; text: string; notice?: boolean };
 type Phase = 'idle' | 'speaking' | 'listening' | 'thinking' | 'done';
 type StatusKey = Extract<
   InterviewUiKey,
@@ -31,6 +36,7 @@ type StatusKey = Extract<
   | 'allowMic'
   | 'preparing'
   | 'coachUnavailable'
+  | 'usingLocal'
   | 'audioUnavailable'
   | 'rateLimited'
   | 'missingKey'
@@ -43,16 +49,6 @@ function newConversationId() {
     return crypto.randomUUID();
   }
   return `c-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-}
-
-function statusFor(error: unknown): StatusKey {
-  if (!(error instanceof AiClientError)) return 'coachUnavailable';
-  if (error.code === 'rate_limited') return 'rateLimited';
-  if (error.code === 'missing_key') return 'missingKey';
-  if (error.code === 'invalid_key') return 'invalidKey';
-  if (error.code === 'model_unavailable') return 'modelUnavailable';
-  if (error.code === 'empty') return 'missed';
-  return 'coachUnavailable';
 }
 
 export default function InterviewScreen() {
@@ -70,6 +66,7 @@ export default function InterviewScreen() {
   const conversationRef = useRef(newConversationId());
   const finishedRef = useRef(false);
   const sendingRef = useRef(false);
+  const localNoticeRef = useRef(false);
   const messagesRef = useRef(messages);
   const langRef = useRef(lang);
   const scrollRef = useRef<ScrollView>(null);
@@ -95,20 +92,44 @@ export default function InterviewScreen() {
 
   const bubbleText = (message: Message) => (message.id === 'm0' ? ui(lang, 'ready') : message.text);
 
+  const visibleTurns = (): InterviewTurn[] =>
+    historyRef.current
+      .filter((turn) => turn.display !== false)
+      .map((turn) => ({
+        role: turn.role === 'assistant' ? 'interviewer' : 'candidate',
+        text: turn.content,
+      }));
+
+  const rememberLocal = (candidate: string, text: string) => {
+    historyRef.current = [
+      ...historyRef.current,
+      { role: 'user', content: candidate, display: true },
+      { role: 'assistant', content: text, display: true },
+    ];
+    return text;
+  };
+
+  const announceLocalFallback = () => {
+    setStatusKey('usingLocal');
+    if (localNoticeRef.current) return;
+    localNoticeRef.current = true;
+    setMessages((current) => [
+      ...current.filter((message) => message.id !== 'm0'),
+      {
+        id: 'local-notice',
+        from: 'coach',
+        notice: true,
+        text: ui(langRef.current, 'usingLocal'),
+      },
+    ]);
+  };
+
   const speakThenCapture = async (session: number, text: string, listenAfter: boolean) => {
     if (session !== sessionRef.current) return;
 
     setPhase('speaking');
-    let blob: Blob | null = null;
-    try {
-      blob = await requestSpeech(text, langRef.current);
-    } catch {
-      if (session !== sessionRef.current) return;
-      setStatusKey('audioUnavailable');
-    }
-    if (session !== sessionRef.current) return;
-    if (blob) setStatusKey('speaking');
-    await playAnswer(text, voiceLang(), blob);
+    setStatusKey('speaking');
+    await playAnswer(text, voiceLang(), null);
     if (session !== sessionRef.current || !listenAfter || finishedRef.current) return;
     await captureAnswer(session);
   };
@@ -170,15 +191,37 @@ export default function InterviewScreen() {
       setPhase('idle');
       sendingRef.current = false;
       await speakThenCapture(session, result.text, true);
-    } catch (error) {
+    } catch {
       if (session !== sessionRef.current) return;
-      const key = statusFor(error);
-      setStatusKey(key);
+      announceLocalFallback();
+      const next = nextInterviewerLine(
+        [...visibleTurns(), { role: 'candidate', text: trimmed }],
+        langRef.current,
+      );
+      const followUp = rememberLocal(trimmed, next.text);
+      setDraft('');
       setMessages((current) => [
-        ...current.filter((message) => message.id !== 'm0'),
-        { id: `e-${Date.now()}`, from: 'coach', text: ui(langRef.current, key) },
+        ...current.filter((message) => message.id !== 'm0' && message.id !== 'local-notice'),
+        {
+          id: 'local-notice',
+          from: 'coach',
+          notice: true,
+          text: ui(langRef.current, 'usingLocal'),
+        },
+        { id: `q-${Date.now()}`, from: 'coach', text: followUp },
       ]);
+      if (next.kind === 'complete') {
+        finishedRef.current = true;
+        setFinished(true);
+        setPhase('done');
+        setStatusKey('complete');
+        sendingRef.current = false;
+        await speakThenCapture(session, followUp, false);
+        return;
+      }
       setPhase('idle');
+      sendingRef.current = false;
+      await speakThenCapture(session, followUp, true);
     } finally {
       sendingRef.current = false;
     }
@@ -193,38 +236,35 @@ export default function InterviewScreen() {
     conversationRef.current = newConversationId();
     historyRef.current = [];
     finishedRef.current = false;
+    localNoticeRef.current = false;
     setStarted(true);
     setFinished(false);
     setDraft('');
     setPartial('');
-    setMessages([{ id: 'm0', from: 'coach', text: '' }]);
-    setPhase('thinking');
-    setStatusKey('preparing');
+    const opening = openingQuestion(langRef.current);
+    historyRef.current = [{ role: 'assistant', content: opening, display: true }];
+    setMessages([{ id: 'q-0', from: 'coach', text: opening }]);
+    setPhase('speaking');
+    setStatusKey('speaking');
+    sendingRef.current = false;
     const mic = requestMicrophone().catch(() => {
       if (session === sessionRef.current) setStatusKey('allowMic');
     });
-    try {
-      const result = await requestCoachReply({
-        conversationId: conversationRef.current,
-        language: langRef.current,
-        intent: 'opening',
-        history: [],
-      });
-      if (session !== sessionRef.current) return;
-      historyRef.current = result.history;
-      setMessages([{ id: 'q-0', from: 'coach', text: result.text }]);
-      setPhase('idle');
-      sendingRef.current = false;
-      await speakThenCapture(session, result.text, true);
-    } catch (error) {
-      if (session !== sessionRef.current) return;
-      const key = statusFor(error);
-      setMessages([{ id: 'err', from: 'coach', text: ui(langRef.current, key) }]);
-      setStatusKey(key);
-      setPhase('idle');
-    } finally {
-      sendingRef.current = false;
-    }
+    void requestCoachReply({
+      conversationId: conversationRef.current,
+      language: langRef.current,
+      intent: 'opening',
+      history: [],
+    })
+      .then((result) => {
+        if (session !== sessionRef.current) return;
+        historyRef.current = [
+          { role: 'assistant', content: opening, display: true },
+          ...result.history.filter((turn) => turn.role !== 'assistant' || turn.content !== result.text),
+        ];
+      })
+      .catch(() => undefined);
+    await speakThenCapture(session, opening, true);
     await mic;
   };
 
@@ -272,15 +312,21 @@ export default function InterviewScreen() {
       setStatusKey('complete');
       sendingRef.current = false;
       await speakThenCapture(session, result.text, false);
-    } catch (error) {
+    } catch {
       if (session !== sessionRef.current) return;
-      const key = statusFor(error);
-      setStatusKey(key);
+      announceLocalFallback();
+      const review = buildInterviewReview(visibleTurns(), langRef.current);
+      historyRef.current = [...historyRef.current, { role: 'assistant', content: review, display: true }];
+      finishedRef.current = true;
       setMessages((current) => [
-        ...current.filter((message) => message.id !== 'm0'),
-        { id: `e-${Date.now()}`, from: 'coach', text: ui(langRef.current, key) },
+        ...current.filter((message) => message.id !== 'm0' && message.id !== 'review'),
+        { id: 'review', from: 'coach', text: review },
       ]);
-      setPhase('idle');
+      setFinished(true);
+      setPhase('done');
+      setStatusKey('complete');
+      sendingRef.current = false;
+      await speakThenCapture(session, review, false);
     } finally {
       sendingRef.current = false;
     }
@@ -296,8 +342,13 @@ export default function InterviewScreen() {
       </View>
       <ScrollView ref={scrollRef} style={styles.chat} contentContainerStyle={styles.chatContent}>
         {messages.map((message) => (
-          <View key={message.id} style={[styles.bubble, message.from === 'you' ? styles.you : styles.coach]}>
-            <Text style={styles.bubbleText}>{bubbleText(message)}</Text>
+          <View
+            key={message.id}
+            style={[
+              styles.bubble,
+              message.notice ? styles.notice : message.from === 'you' ? styles.you : styles.coach,
+            ]}>
+            <Text style={[styles.bubbleText, message.notice && styles.noticeText]}>{bubbleText(message)}</Text>
           </View>
         ))}
         {partial ? (
@@ -396,6 +447,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.mutedBlue,
+  },
+  notice: {
+    alignSelf: 'stretch',
+    maxWidth: '100%',
+    backgroundColor: colors.cream,
+    borderWidth: 1,
+    borderColor: colors.brown,
+  },
+  noticeText: {
+    fontFamily: fonts.sansSemibold,
+    color: colors.brown,
+    textAlign: 'center',
   },
   bubbleText: {
     fontFamily: fonts.sans,

@@ -63,12 +63,20 @@ export async function completeChat(language: InterviewLang, turns: ChatTurn[]) {
           role: turn.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: turn.content }],
         })),
-        generationConfig: { maxOutputTokens: 1024 },
+        generationConfig: {
+          maxOutputTokens: 4096,
+          thinkingConfig: { thinkingLevel: 'MINIMAL' },
+        },
       }),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(12000),
     },
-  ).catch(() => {
-    throw new AiError(502, 'unavailable', 'The career coach could not be reached.');
+  ).catch((error) => {
+    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new AiError(
+      502,
+      'unavailable',
+      timedOut ? 'The career coach timed out waiting for Gemini.' : 'The career coach could not be reached.',
+    );
   });
 
   const payload = (await response.json().catch(() => null)) as GeminiResponse | null;

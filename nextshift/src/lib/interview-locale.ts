@@ -103,6 +103,11 @@ const UI = {
     'El orientador no está disponible ahora. No se inventó una respuesta.',
     '职业助手暂时不可用。这里没有用编造的回答代替。',
   ),
+  usingLocal: pack(
+    'Cloud interview API is unavailable. Continuing with the on-device expert system.',
+    'La API de entrevista en la nube no está disponible. Seguimos con el sistema experto en el dispositivo.',
+    '云端面试接口不可用。接下来改用设备上的专家系统继续。',
+  ),
   checkTranscript: pack(
     'Check the words below, edit them if needed, then press Send.',
     'Revisa las palabras, corrígelas si hace falta y pulsa Enviar.',
@@ -791,6 +796,10 @@ const PHRASES = {
 };
 
 export type PhraseKey = keyof typeof PHRASES;
+
+export function openingQuestion(lang: InterviewLang): string {
+  return PHRASES.opening[lang];
+}
 
 const AND_LIST_VARS = new Set(['traitList', 'behaviorList', 'valueList', 'emotionList']);
 const LEAD_VARS = new Set(['hobbyLead']);
